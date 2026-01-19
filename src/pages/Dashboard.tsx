@@ -198,16 +198,21 @@ const Dashboard = () => {
     const deviceData = sensorData[selectedDeviceId];
     if (deviceData) {
       return {
-        temperature: deviceData.temperature,
-        soil_humidity: deviceData.soil_humidity,
-        air_humidity: deviceData.air_humidity,
-        tds: deviceData.tds,
+        temperature: deviceData.temperature ?? null,
+        soil_humidity: deviceData.soil_humidity ?? null,
+        air_humidity: deviceData.air_humidity ?? null,
+        tds: deviceData.tds ?? null,
       };
     }
     return { temperature: null, soil_humidity: null, air_humidity: null, tds: null };
   };
 
   const displayData = getDisplayData();
+
+  const formatValue = (value: number | null | undefined, unit: string, decimals: number = 0) => {
+    if (value === null || value === undefined) return '--';
+    return `${Number(value).toFixed(decimals)}${unit}`;
+  };
 
   if (loading) {
     return (
@@ -221,28 +226,28 @@ const Dashboard = () => {
     {
       icon: Thermometer,
       label: 'Temperature',
-      value: displayData.temperature !== null ? `${displayData.temperature.toFixed(1)}°C` : '--',
+      value: formatValue(displayData.temperature, '°C', 1),
       subtitle: 'Now',
       iconBg: 'bg-gradient-to-br from-orange-400 to-red-500',
     },
     {
       icon: Droplets,
       label: 'Soil Humidity',
-      value: displayData.soil_humidity !== null ? `${displayData.soil_humidity.toFixed(0)}%` : '--',
+      value: formatValue(displayData.soil_humidity, '%', 0),
       subtitle: 'Current',
       iconBg: 'bg-gradient-to-br from-emerald-400 to-green-600',
     },
     {
       icon: Wind,
       label: 'Air Humidity',
-      value: displayData.air_humidity !== null ? `${displayData.air_humidity.toFixed(0)}%` : '--',
+      value: formatValue(displayData.air_humidity, '%', 0),
       subtitle: 'Current',
       iconBg: 'bg-gradient-to-br from-sky-400 to-blue-600',
     },
     {
       icon: Beaker,
       label: 'TDS',
-      value: displayData.tds !== null ? `${displayData.tds.toFixed(1)}` : '--',
+      value: formatValue(displayData.tds, '', 1),
       subtitle: 'ppm',
       iconBg: 'bg-gradient-to-br from-violet-400 to-purple-600',
     },
@@ -251,7 +256,7 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-neumorphic p-0 md:p-6 lg:p-8 safe-area-top">
       {/* Main Container - Neumorphic Card */}
-      <div className="max-w-9xl mx-auto bg-neumorphic rounded-3xl shadow-[12px_12px_24px_hsl(var(--neumorphic-shadow-dark)),-12px_-12px_24px_hsl(var(--neumorphic-shadow-light))] p-3 md:p-8">
+      <div className="w-full bg-neumorphic rounded-3xl shadow-[12px_12px_24px_hsl(var(--neumorphic-shadow-dark)),-12px_-12px_24px_hsl(var(--neumorphic-shadow-light))] p-3 md:p-8">
 
         {/* Header Section */}
         <div className="mb-8">
@@ -340,7 +345,7 @@ const Dashboard = () => {
                     <div className="flex-1 min-w-0">
                       <h4 className="font-medium text-foreground truncate">{device.name}</h4>
                       <p className="text-sm text-muted-foreground">
-                        {deviceSensor?.temperature !== null
+                        {deviceSensor && deviceSensor.temperature !== null && deviceSensor.temperature !== undefined
                           ? `${deviceSensor.temperature}°C`
                           : 'No data'}
                       </p>

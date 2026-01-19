@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">sixity</string>
+    <string name="title_activity_main">sixity</string>
+    <string name="package_name">com.esp32.dashboard</string>
+    <string name="custom_url_scheme">com.esp32.dashboard</string>
+</resources>

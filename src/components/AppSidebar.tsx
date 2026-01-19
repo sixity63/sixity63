@@ -26,19 +26,19 @@ export function AppSidebar() {
 
   return (
     <Sidebar
-      collapsible="icon"
+      collapsible="offcanvas"
       className="border-r border-blue-200/20 bg-blue-50/10 md:backdrop-blur-md md:shadow-[0_8px_32px_rgba(31,38,135,0.37)] will-change-[transform]"
     >
       <SidebarContent className="bg-transparent">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-lg font-bold text-primary px-4 py-6 mx-2 my-4 rounded-2xl bg-blue-100/20 md:backdrop-blur-sm md:shadow-[inset_0_2px_4px_rgba(255,255,255,0.1),inset_0_-2px_4px_rgba(0,0,0,0.1)] border border-blue-200/30">
-            {open && (
+          {open && (
+            <SidebarGroupLabel className="text-lg font-bold text-primary px-4 py-6 mx-2 my-4 rounded-2xl bg-blue-100/20 md:backdrop-blur-sm md:shadow-[inset_0_2px_4px_rgba(255,255,255,0.1),inset_0_-2px_4px_rgba(0,0,0,0.1)] border border-blue-200/30">
               <span>
                 <span className="text-primary">Six</span>
                 <span className="text-muted-foreground">ity</span>
               </span>
-            )}
-          </SidebarGroupLabel>
+            </SidebarGroupLabel>
+          )}
           <SidebarGroupContent>
             <SidebarMenu className="px-2 space-y-2">
               {menuItems.map((item) => (
