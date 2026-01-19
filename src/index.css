@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 210 20% 15%;
+
+    --card: 210 15% 100%;
+    --card-foreground: 210 20% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 20% 15%;
+
+    --primary: 195 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 195 80% 96%;
+    --secondary-foreground: 195 100% 40%;
+
+    --muted: 210 15% 96%;
+    --muted-foreground: 210 15% 45%;
+
+    --accent: 195 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 20% 90%;
+    --input: 210 20% 90%;
+    --ring: 195 100% 50%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 210 20% 15%;
+    --sidebar-primary: 195 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 195 80% 96%;
+    --sidebar-accent-foreground: 195 100% 40%;
+    --sidebar-border: 210 20% 90%;
+    --sidebar-ring: 195 100% 50%;
+
+    /* Futuristic gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(195, 100%, 50%), hsl(195, 100%, 60%));
+    --gradient-card: linear-gradient(135deg, hsl(0, 0%, 100%), hsl(195, 80%, 98%));
+
+    /* Shadows */
+    --shadow-card: 0 4px 20px -2px hsl(195, 100%, 50%, 0.1);
+    --shadow-hover: 0 8px 30px -4px hsl(195, 100%, 50%, 0.2);
+
+    /* Neumorphic */
+    --neumorphic-bg: 210 15% 93%;
+    --neumorphic-shadow-dark: 210 15% 80%;
+    --neumorphic-shadow-light: 0 0% 100%;
+
+    /* Transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    --background: 210 30% 8%;
+    --foreground: 0 0% 98%;
+
+    --card: 210 25% 12%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 210 25% 12%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 195 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 25% 16%;
+    --secondary-foreground: 195 100% 60%;
+
+    --muted: 210 25% 16%;
+    --muted-foreground: 210 15% 65%;
+
+    --accent: 195 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 25% 20%;
+    --input: 210 25% 20%;
+    --ring: 195 100% 50%;
+
+    --sidebar-background: 210 25% 12%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 195 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 25% 16%;
+    --sidebar-accent-foreground: 195 100% 60%;
+    --sidebar-border: 210 25% 20%;
+    --sidebar-ring: 195 100% 50%;
+
+    /* Neumorphic dark */
+    --neumorphic-bg: 210 25% 14%;
+    --neumorphic-shadow-dark: 210 30% 8%;
+    --neumorphic-shadow-light: 210 20% 20%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Safe area helper for iOS notch / status bar */
+  .safe-area-top {
+    /* legacy iOS */
+    padding-top: constant(safe-area-inset-top);
+    /* modern - fallback to 0 if unsupported */
+    padding-top: env(safe-area-inset-top, 0px);
+    /* add minimum spacing so header is never flush with status bar (smaller fallback for phones) */
+    padding-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+  }
+
+  /* Extra mobile-only boost in case device/webview doesn't report safe-area inset */
+  @media (max-width: 640px) {
+    .safe-area-top {
+      padding-top: calc(env(safe-area-inset-top, 0px) + 1rem);
+    }
+  }
+}
