@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Wifi, WifiOff, RefreshCw, Save, Lock } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, Save, Lock, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/components/ThemeProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ const BRIDGE_API_KEY = import.meta.env.VITE_BRIDGE_API_KEY || '';
 
 const Settings = () => {
   const { selectedDeviceId } = useDevice();
+  const { theme, setTheme } = useTheme();
   const [wifiConfig, setWifiConfig] = useState({
     ssid: "",
     password: "",
@@ -66,7 +68,7 @@ const Settings = () => {
       if (error) throw error;
 
       setDevices(data || []);
-      
+
       // Select device based on context or auto-select first device
       if (data && data.length > 0) {
         let deviceToSelect = null;
@@ -75,14 +77,14 @@ const Settings = () => {
         } else {
           deviceToSelect = data[0];
         }
-        
+
         if (deviceToSelect && (!selectedDevice || selectedDevice.id !== deviceToSelect.id)) {
           setSelectedDevice(deviceToSelect);
           setWifiConfig({
             ssid: deviceToSelect.wifi_ssid || "",
             password: deviceToSelect.wifi_password || "",
           });
-          setIsConnected(!!deviceToSelect.last_seen && 
+          setIsConnected(!!deviceToSelect.last_seen &&
             new Date().getTime() - new Date(deviceToSelect.last_seen).getTime() < 60000);
         }
       }
@@ -265,7 +267,7 @@ const Settings = () => {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Terakhir Terlihat:</span>
                   <span className="text-sm font-medium">
-                    {selectedDevice?.last_seen 
+                    {selectedDevice?.last_seen
                       ? new Date(selectedDevice.last_seen).toLocaleString('id-ID')
                       : "-"}
                   </span>
@@ -336,8 +338,8 @@ const Settings = () => {
                     onChange={(e) => setWifiConfig({ ...wifiConfig, password: e.target.value })}
                   />
                 </div>
-                <Button 
-                  onClick={handleSave} 
+                <Button
+                  onClick={handleSave}
                   disabled={loading}
                   className="w-full md:w-auto bg-primary hover:bg-primary/90"
                 >
@@ -347,7 +349,37 @@ const Settings = () => {
               </div>
             </CardContent>
           </Card>
-        
+
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Moon className="h-5 w-5" />
+                Tampilan Aplikasi
+              </CardTitle>
+              <CardDescription>Sesuaikan tema aplikasi (Gelap/Terang)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant={theme === 'light' ? 'default' : 'outline'}
+                  onClick={() => setTheme('light')}
+                  className="w-full justify-start md:justify-center"
+                >
+                  <Sun className="mr-2 h-4 w-4" />
+                  Terang
+                </Button>
+                <Button
+                  variant={theme === 'dark' ? 'default' : 'outline'}
+                  onClick={() => setTheme('dark')}
+                  className="w-full justify-start md:justify-center"
+                >
+                  <Moon className="mr-2 h-4 w-4" />
+                  Gelap
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="border-border">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
@@ -378,8 +410,8 @@ const Settings = () => {
                     onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
                   />
                 </div>
-                <Button 
-                  onClick={handleChangePassword} 
+                <Button
+                  onClick={handleChangePassword}
                   className="w-full md:w-auto bg-primary hover:bg-primary/90"
                   disabled={isChangingPassword}
                 >

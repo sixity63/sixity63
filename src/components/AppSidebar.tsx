@@ -10,6 +10,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { LogoutButton } from "./LogoutButton";
 
@@ -27,16 +28,17 @@ export function AppSidebar() {
   return (
     <Sidebar
       collapsible="offcanvas"
-      className="border-r border-blue-200/20 bg-blue-50/10 md:backdrop-blur-md md:shadow-[0_8px_32px_rgba(31,38,135,0.37)] will-change-[transform]"
+      className="border-r border-blue-200/20 bg-blue-50/10 md:backdrop-blur-md md:shadow-[0_8px_32px_rgba(31,38,135,0.37)] will-change-[transform] z-[100]"
     >
       <SidebarContent className="bg-transparent">
         <SidebarGroup>
           {open && (
-            <SidebarGroupLabel className="text-lg font-bold text-primary px-4 py-6 mx-2 my-4 rounded-2xl bg-blue-100/20 md:backdrop-blur-sm md:shadow-[inset_0_2px_4px_rgba(255,255,255,0.1),inset_0_-2px_4px_rgba(0,0,0,0.1)] border border-blue-200/30">
-              <span>
+            <SidebarGroupLabel className="text-lg font-bold text-primary px-4 py-6 mx-2 my-4 rounded-2xl bg-blue-100/20 md:backdrop-blur-sm md:shadow-[inset_0_2px_4px_rgba(255,255,255,0.1),inset_0_-2px_4px_rgba(0,0,0,0.1)] border border-blue-200/30 flex justify-between items-center">
+              <div className="flex items-center">
                 <span className="text-primary">Six</span>
                 <span className="text-muted-foreground">ity</span>
-              </span>
+              </div>
+              <SidebarTrigger className="h-6 w-6" />
             </SidebarGroupLabel>
           )}
           <SidebarGroupContent>
