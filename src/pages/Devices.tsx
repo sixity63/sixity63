@@ -66,6 +66,22 @@ const Devices = () => {
 
   useEffect(() => {
     fetchDevices();
+
+    const channel = supabase
+      .channel('devices-changes-list')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'devices' },
+        (payload) => {
+          console.log('Device change received:', payload);
+          fetchDevices();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleAddDevice = async (e: React.FormEvent) => {

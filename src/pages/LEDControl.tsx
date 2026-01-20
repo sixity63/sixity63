@@ -207,8 +207,21 @@ const LEDControl = () => {
       )
       .subscribe();
 
+    // Subscribe to device changes
+    const deviceChannel = supabase
+      .channel('led-control-devices')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'devices' },
+        () => {
+          fetchDevices();
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(deviceChannel);
     };
   }, [user]);
 
@@ -264,6 +277,31 @@ const LEDControl = () => {
     const interval = setInterval(checkSchedules, 1000); // Check every 1 second
     return () => clearInterval(interval);
   }, [user, leds]);
+
+  // Polling fallback and focus handler for synchronization
+  useEffect(() => {
+    if (!user) return;
+
+    // Fetch immediately on focus/visibility change
+    const handleFocus = () => {
+      fetchLEDs(true);
+      fetchDevices();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    // Poll every 5 seconds as fallback for realtime connection issues
+    const pollInterval = setInterval(() => {
+      fetchLEDs(true);
+    }, 5000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+      clearInterval(pollInterval);
+    };
+  }, [user]);
 
   const fetchDevices = async () => {
     try {

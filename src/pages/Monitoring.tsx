@@ -30,6 +30,22 @@ const Monitoring = () => {
 
   useEffect(() => {
     fetchDevices();
+
+    const devicesChannel = supabase
+      .channel('monitoring-devices-updates')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'devices' },
+        (payload) => {
+          console.log('Device update in monitoring:', payload);
+          fetchDevices();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(devicesChannel);
+    };
   }, []);
 
   useEffect(() => {
@@ -209,7 +225,7 @@ const Monitoring = () => {
         </Card>
       )}
 
-      <Card className="border-border overflow-hidden bg-white rounded-xl shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
+      <Card className="border-border overflow-hidden bg-white rounded-xl transform-gpu shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
         <CardHeader className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="min-w-0">
@@ -233,7 +249,7 @@ const Monitoring = () => {
         </CardContent>
       </Card>
 
-      <Card className="border-border overflow-hidden bg-white rounded-xl shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
+      <Card className="border-border overflow-hidden bg-white rounded-xl transform-gpu shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
         <CardHeader className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="min-w-0">
@@ -255,7 +271,7 @@ const Monitoring = () => {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-border hover:shadow-lg transition-shadow bg-white rounded-xl shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
+        <Card className="border-border hover:shadow-lg transition-shadow bg-white rounded-xl transform-gpu shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Suhu Ruangan</CardTitle>
             <Thermometer className="h-4 w-4 text-primary" />
@@ -266,7 +282,7 @@ const Monitoring = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-border hover:shadow-lg transition-shadow bg-white rounded-xl shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
+        <Card className="border-border hover:shadow-lg transition-shadow bg-white rounded-xl transform-gpu shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Kelembapan Tanah</CardTitle>
             <Droplets className="h-4 w-4 text-primary" />
@@ -277,7 +293,7 @@ const Monitoring = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-border hover:shadow-lg transition-shadow bg-white rounded-xl shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
+        <Card className="border-border hover:shadow-lg transition-shadow bg-white rounded-xl transform-gpu shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Kelembapan Udara</CardTitle>
             <Wind className="h-4 w-4 text-primary" />
@@ -288,7 +304,7 @@ const Monitoring = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-border hover:shadow-lg transition-shadow bg-white rounded-xl shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
+        <Card className="border-border hover:shadow-lg transition-shadow bg-white rounded-xl transform-gpu shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))]">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">TDS Meter</CardTitle>
             <Gauge className="h-4 w-4 text-primary" />

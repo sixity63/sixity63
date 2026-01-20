@@ -48,7 +48,7 @@ export function Layout({ children }: LayoutProps) {
       <div className="flex min-h-screen w-full bg-background">
         <AppSidebar />
         <div className="flex-1 flex flex-col w-full max-w-[200mm] mx-auto bg-background min-h-screen relative shadow-[0_0_50px_rgba(0,0,0,0.1)] border-x border-border/50">
-          <header className="sticky top-0 z-50 h-12 border-b border-border flex items-center justify-between px-4 bg-card/80 backdrop-blur-md safe-area-top">
+          <header className="sticky top-0 z-50 w-full min-h-12 h-auto border-b border-border flex items-center justify-between px-4 pb-2 bg-card/80 backdrop-blur-md safe-area-top">
             <div className="flex items-center">
               <SidebarTrigger className="mr-2" />
               <h1 className="text-xl font-bold text-foreground tracking-tight">
