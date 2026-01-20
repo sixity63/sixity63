@@ -216,7 +216,7 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[80vh] flex items-center justify-center bg-background">
+      <div className="min-h-[80vh] flex items-center justify-center bg-background dark:bg-transparent">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
@@ -254,14 +254,14 @@ const Dashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background p-0 md:p-6 lg:p-8 safe-area-top">
+    <div className="min-h-screen bg-background dark:bg-transparent p-0 md:p-6 lg:p-8 safe-area-top">
       {/* Main Container - Neumorphic Card */}
-      <div className="w-full bg-background rounded-3xl transform-gpu shadow-[12px_12px_24px_hsl(var(--neumorphic-shadow-dark)),-12px_-12px_24px_hsl(var(--neumorphic-shadow-light))] p-3 md:p-8">
+      <div className="w-full bg-background dark:bg-transparent rounded-3xl transform-gpu shadow-[12px_12px_24px_hsl(var(--neumorphic-shadow-dark)),-12px_-12px_24px_hsl(var(--neumorphic-shadow-light))] dark:shadow-none p-3 md:p-8">
 
         {/* Header Section */}
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 rounded-full bg-background shadow-[4px_4px_8px_hsl(var(--neumorphic-shadow-dark)),-4px_-4px_8px_hsl(var(--neumorphic-shadow-light))] flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full bg-background dark:bg-white/10 shadow-[4px_4px_8px_hsl(var(--neumorphic-shadow-dark)),-4px_-4px_8px_hsl(var(--neumorphic-shadow-light))] dark:shadow-none flex items-center justify-center">
               <User className="w-6 h-6 text-muted-foreground" />
             </div>
             <div>
@@ -274,7 +274,7 @@ const Dashboard = () => {
           {devices.length > 0 && (
             <div className="flex justify-end">
               <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
-                <SelectTrigger className="w-auto min-w-[150px] bg-background border-none shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))] text-foreground">
+                <SelectTrigger className="w-auto min-w-[150px] bg-background dark:bg-white/10 border-none shadow-[inset_2px_2px_4px_hsl(var(--neumorphic-shadow-dark)),inset_-2px_-2px_4px_hsl(var(--neumorphic-shadow-light))] dark:shadow-none text-foreground">
                   <SelectValue placeholder="Select device" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover border border-border">
@@ -294,7 +294,7 @@ const Dashboard = () => {
           {sensorCards.map((card, index) => (
             <div
               key={index}
-              className="bg-background rounded-2xl transform-gpu shadow-[6px_6px_12px_hsl(var(--neumorphic-shadow-dark)),-6px_-6px_12px_hsl(var(--neumorphic-shadow-light))] p-4 md:p-5 transition-all hover:shadow-[8px_8px_16px_hsl(var(--neumorphic-shadow-dark)),-8px_-8px_16px_hsl(var(--neumorphic-shadow-light))]"
+              className="bg-background dark:bg-black/20 rounded-2xl transform-gpu shadow-[6px_6px_12px_hsl(var(--neumorphic-shadow-dark)),-6px_-6px_12px_hsl(var(--neumorphic-shadow-light))] dark:shadow-none dark:border dark:border-white/10 p-4 md:p-5 transition-all hover:scale-[1.02]"
             >
               {/* Icon */}
               <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl ${card.iconBg} flex items-center justify-center mb-3 md:mb-4 shadow-md`}>
@@ -334,10 +334,10 @@ const Dashboard = () => {
                 return (
                   <div
                     key={device.id}
-                    className="bg-background rounded-xl transform-gpu shadow-[inset_4px_4px_8px_hsl(var(--neumorphic-shadow-dark)),inset_-4px_-4px_8px_hsl(var(--neumorphic-shadow-light))] p-4 flex items-center gap-4"
+                    className="bg-background dark:bg-black/20 rounded-xl transform-gpu shadow-[inset_4px_4px_8px_hsl(var(--neumorphic-shadow-dark)),inset_-4px_-4px_8px_hsl(var(--neumorphic-shadow-light))] dark:shadow-none dark:border dark:border-white/10 p-4 flex items-center gap-4"
                   >
                     {/* Device Icon */}
-                    <div className="w-10 h-10 rounded-lg bg-background shadow-[3px_3px_6px_hsl(var(--neumorphic-shadow-dark)),-3px_-3px_6px_hsl(var(--neumorphic-shadow-light))] flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-lg bg-background dark:bg-white/10 shadow-[3px_3px_6px_hsl(var(--neumorphic-shadow-dark)),-3px_-3px_6px_hsl(var(--neumorphic-shadow-light))] dark:shadow-none flex items-center justify-center">
                       <Cpu className={`w-5 h-5 ${isOnline ? 'text-primary' : 'text-muted-foreground'}`} />
                     </div>
 

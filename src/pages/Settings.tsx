@@ -219,7 +219,7 @@ const Settings = () => {
       </div>
 
       {devices.length === 0 && (
-        <Card className="border-border">
+        <Card className="border-border bg-card/50 dark:bg-transparent dark:border-white/10">
           <CardContent className="pt-6">
             <p className="text-center text-muted-foreground">
               Belum ada perangkat terdaftar. Silakan tambahkan perangkat di halaman Perangkat.
@@ -231,7 +231,7 @@ const Settings = () => {
       {devices.length > 0 && (
         <>
           <div className="grid gap-6 md:grid-cols-2">
-            <Card className="border-border">
+            <Card className="border-border bg-card/50 dark:bg-transparent dark:border-white/10">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   {isConnected ? (
@@ -275,7 +275,7 @@ const Settings = () => {
               </CardContent>
             </Card>
 
-            <Card className="border-border">
+            <Card className="border-border bg-card/50 dark:bg-transparent dark:border-white/10">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
@@ -312,7 +312,7 @@ const Settings = () => {
             </Card>
           </div>
 
-          <Card className="border-border">
+          <Card className="border-border bg-card/50 dark:bg-transparent dark:border-white/10">
             <CardHeader>
               <CardTitle className="text-xl font bold">Konfigurasi WiFi</CardTitle>
               <CardDescription>Atur kredensial WiFi untuk ESP32</CardDescription>
@@ -350,7 +350,7 @@ const Settings = () => {
             </CardContent>
           </Card>
 
-          <Card className="border-border">
+          <Card className="border-border bg-card/50 dark:bg-transparent dark:border-white/10">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
                 <Moon className="h-5 w-5" />
@@ -380,7 +380,7 @@ const Settings = () => {
             </CardContent>
           </Card>
 
-          <Card className="border-border">
+          <Card className="border-border bg-card/50 dark:bg-transparent dark:border-white/10">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
                 <Lock className="h-5 w-5" />

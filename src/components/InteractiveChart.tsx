@@ -378,7 +378,7 @@ const InteractiveChart = ({ data, lines, height = 350, autoFollow = true, timeRa
       </div>
 
       {/* Info bar */}
-      <div className="flex items-center justify-between text-xs sm:text-sm text-muted-foreground bg-secondary/30 px-2 sm:px-3 py-1.5 sm:py-2 rounded-md gap-2">
+      <div className="flex items-center justify-between text-xs sm:text-sm text-muted-foreground bg-secondary/30 dark:bg-transparent dark:border dark:border-white/10 px-2 sm:px-3 py-1.5 sm:py-2 rounded-md gap-2">
         <span className="flex items-center gap-1 sm:gap-2">
           <Hand className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
           <span className="hidden sm:inline">Pinch 2 jari untuk zoom, geser 1 jari untuk navigasi</span>
