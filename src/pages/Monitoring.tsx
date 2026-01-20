@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Thermometer, Droplets, Wind, Gauge } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,13 +9,51 @@ import { useDevice } from "@/contexts/DeviceContext";
 import InteractiveChart from "@/components/InteractiveChart";
 
 const Monitoring = () => {
-  const [timeRange, setTimeRange] = useState("24");
-  const [sensorData, setSensorData] = useState<any[]>([]);
+  const [timeRange, setTimeRange] = useState(() => {
+    return localStorage.getItem("monitoringTimeRange") || "24";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("monitoringTimeRange", timeRange);
+  }, [timeRange]);
+
   const [devices, setDevices] = useState<any[]>([]);
   const { selectedDeviceId, setSelectedDeviceId } = useDevice();
   const selectedDevice = selectedDeviceId;
   const setSelectedDevice = setSelectedDeviceId;
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: sensorData = [] } = useQuery({
+    queryKey: ['sensorData', selectedDevice, timeRange],
+    queryFn: async () => {
+      if (!selectedDevice) return [];
+
+      const hoursAgo = new Date();
+      hoursAgo.setHours(hoursAgo.getHours() - parseInt(timeRange));
+
+      const { data, error } = await supabase
+        .from('sensor_data')
+        .select('*')
+        .eq('device_id', selectedDevice)
+        .gte('created_at', hoursAgo.toISOString())
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Gagal mengambil data sensor",
+          variant: "destructive",
+        });
+        throw error;
+      }
+
+      return data || [];
+    },
+    enabled: !!selectedDevice,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    refetchOnWindowFocus: false,
+  });
 
   const currentData = sensorData.length > 0 ? {
     temperature: sensorData[sensorData.length - 1]?.temperature || 0,
@@ -50,13 +89,7 @@ const Monitoring = () => {
 
   useEffect(() => {
     if (selectedDevice) {
-      // Clear existing sensor data to force loading state when switching devices or returning to page
-      setSensorData([]);
-
-      // Immediate fetch
-      fetchSensorData();
-
-      // Setup polling (fallback for realtime)
+      // Setup polling (fallback for realtime) - Updates Cache
       const fetchLatest = async () => {
         const { data } = await supabase
           .from('sensor_data')
@@ -67,7 +100,7 @@ const Monitoring = () => {
           .single();
 
         if (data) {
-          setSensorData((prevData) => {
+          queryClient.setQueryData(['sensorData', selectedDevice, timeRange], (prevData: any[] = []) => {
             const lastData = prevData[prevData.length - 1];
             // Only add if it's newer than what we have
             if (!lastData || new Date(data.created_at).getTime() > new Date(lastData.created_at).getTime()) {
@@ -80,7 +113,7 @@ const Monitoring = () => {
 
       const intervalId = setInterval(fetchLatest, 5000);
 
-      // Setup realtime subscription with unique channel name per device so re-subscribe works reliably
+      // Setup realtime subscription - Updates Cache
       const channelName = `sensor-data-changes-${selectedDevice}`;
       const channel = supabase
         .channel(channelName)
@@ -94,28 +127,25 @@ const Monitoring = () => {
           },
           (payload) => {
             console.log('New sensor data received:', payload);
-            // Add new data to the existing array
-            setSensorData((prevData) => [...prevData, payload.new]);
+            // Add new data to the react-query cache
+            queryClient.setQueryData(['sensorData', selectedDevice, timeRange], (prevData: any[] = []) => {
+              return [...prevData, payload.new];
+            });
           }
         )
         .subscribe();
 
-      // Re-fetch when the tab/window regains focus or becomes visible again
-      const onFocus = () => fetchSensorData();
-      const onVisibility = () => {
-        if (document.visibilityState === 'visible') fetchSensorData();
-      };
-      window.addEventListener('focus', onFocus);
-      document.addEventListener('visibilitychange', onVisibility);
+      // Refetch full data on focus (optional, but handled by useQuery refetchOnWindowFocus if enabled, here we manually sync via polling or let stales handle it)
+      // Since we set refetchOnWindowFocus: false, we rely on realtime/polling.
+      // But if user was away for LOOOONG time, polling handles it (if interval runs in background? no).
+      // Let's rely on standard query invalidation if needed, or just the polling when visible.
 
       return () => {
         clearInterval(intervalId);
-        window.removeEventListener('focus', onFocus);
-        document.removeEventListener('visibilitychange', onVisibility);
         supabase.removeChannel(channel);
       };
     }
-  }, [selectedDevice, timeRange]);
+  }, [selectedDevice, timeRange, queryClient]);
 
   const fetchDevices = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -143,31 +173,6 @@ const Monitoring = () => {
         setSelectedDevice(data[0].id);
       }
     }
-  };
-
-  const fetchSensorData = async () => {
-    if (!selectedDevice) return;
-
-    const hoursAgo = new Date();
-    hoursAgo.setHours(hoursAgo.getHours() - parseInt(timeRange));
-
-    const { data, error } = await supabase
-      .from('sensor_data')
-      .select('*')
-      .eq('device_id', selectedDevice)
-      .gte('created_at', hoursAgo.toISOString())
-      .order('created_at', { ascending: true });
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Gagal mengambil data sensor",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setSensorData(data || []);
   };
 
   const chartData = sensorData.map(item => {

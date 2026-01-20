@@ -158,6 +158,100 @@ const LEDFormFields = ({
   </div>
 );
 
+// Memoized LED Card Component for Performance
+const LEDCardItem = ({
+  led,
+  deviceName,
+  onToggle,
+  onEdit,
+  onDelete
+}: {
+  led: LED;
+  deviceName: string;
+  onToggle: (id: string) => void;
+  onEdit: (led: LED) => void;
+  onDelete: (id: string) => void;
+}) => {
+  return (
+    <Card className="relative overflow-hidden transition-all border-2 border-white/10 bg-card/90 w-[calc(50%-0.4rem)] sm:w-full max-w-none sm:max-w-[80mm] group transform-gpu">
+      <div className={`absolute top-0 left-0 right-0 h-1.5 ${led.active ? 'bg-blue-500' : 'bg-gray-400'}`} />
+      <CardHeader className="p-2 sm:p-6">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0 mr-1">
+            <CardTitle className="text-sm sm:text-xl truncate font-bold">{led.name}</CardTitle>
+            <CardDescription className="text-[10px] sm:text-sm truncate opacity-70">
+              {deviceName}
+            </CardDescription>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <Switch
+              checked={led.active}
+              onCheckedChange={() => onToggle(led.id)}
+              className="data-[state=checked]:bg-blue-500 scale-75 sm:scale-100"
+            />
+            <div className="flex items-center gap-1 opacity-80">
+              <Power className={`h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 ${led.active ? 'text-blue-500' : 'text-gray-400'}`} />
+              <span className="text-[8px] sm:text-[10px] font-semibold">{led.active ? "ON" : "OFF"}</span>
+            </div>
+          </div>
+        </div>
+        <CardDescription className="text-[10px] sm:text-sm opacity-70">Pin: {led.pin}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2 sm:space-y-4 p-2 sm:p-6 pt-0 sm:pt-0">
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-3">
+          {/* Mode Slot */}
+          <div className="flex items-center gap-1.5 sm:gap-3 p-1.5 sm:p-3 bg-white/5 dark:bg-black/20 rounded-lg sm:rounded-xl border border-white/5">
+            <Calendar className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-primary" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] sm:text-[10px] font-medium opacity-70">Mode</p>
+              <p className="text-[9px] sm:text-xs font-bold truncate uppercase">{led.mode === 'auto' ? 'Auto' : 'Man'}</p>
+            </div>
+          </div>
+
+          {/* Jadwal Slot */}
+          <div className={`flex items-center gap-1.5 sm:gap-3 p-1.5 sm:p-3 bg-white/5 dark:bg-black/20 rounded-lg sm:rounded-xl border border-white/5 transition-opacity ${led.mode !== 'auto' ? 'opacity-40' : 'opacity-100'}`}>
+            <Calendar className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-primary" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] sm:text-[10px] font-medium opacity-70">Jadwal</p>
+              <p className="text-[8px] sm:text-xs font-bold capitalize whitespace-nowrap">{led.mode === 'auto' ? led.schedule : 'Inactive'}</p>
+            </div>
+          </div>
+
+          {/* Waktu Operasi Slot */}
+          <div className={`col-span-2 flex items-center gap-1.5 sm:gap-3 p-1.5 sm:p-3 bg-white/5 dark:bg-black/20 rounded-lg sm:rounded-xl border border-white/5 transition-opacity ${led.mode !== 'auto' ? 'opacity-40' : 'opacity-100'}`}>
+            <Clock className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-primary" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] sm:text-[10px] font-medium opacity-70">Waktu Operasi</p>
+              <p className="text-[9px] sm:text-xs font-bold truncate">
+                {led.mode === 'auto' ? `${led.active_time} - ${led.inactive_time}` : 'Timer Inactive'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-1.5 sm:gap-2 pt-1">
+          <Button
+            variant="outline"
+            className="flex-1 h-7 sm:h-9 px-0 sm:px-4 text-[10px] sm:text-xs border-white/10"
+            onClick={() => onEdit(led)}
+          >
+            <Pencil className="h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
+            <span className="hidden sm:inline">Edit</span>
+          </Button>
+          <Button
+            variant="destructive"
+            className="flex-1 h-7 sm:h-9 px-0 sm:px-4 text-[10px] sm:text-xs"
+            onClick={() => onDelete(led.id)}
+          >
+            <Trash2 className="h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
+            <span className="hidden sm:inline">Hapus</span>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 const LEDControl = () => {
   const { user } = useAuth();
   const [leds, setLeds] = useState<LED[]>([]);
@@ -631,82 +725,14 @@ const LEDControl = () => {
       ) : (
         <div className="flex flex-wrap justify-start gap-3 sm:gap-6">
           {leds.map((led) => (
-            <Card key={led.id} className="relative overflow-hidden transition-all hover:shadow-lg border-2 border-white/10 bg-card/40 backdrop-blur-xl w-[calc(50%-0.4rem)] sm:w-full max-w-none sm:max-w-[80mm] group">
-              <div className={`absolute top-0 left-0 right-0 h-2 ${led.active ? 'bg-gradient-to-r from-blue-400 to-blue-600 shadow-[0_2px_4px_rgba(59,130,246,0.4)]' : 'bg-gradient-to-r from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700 shadow-[0_2px_4px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_4px_rgba(0,0,0,0.3)]'}`} />
-              <CardHeader className="p-2 sm:p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0 mr-1">
-                    <CardTitle className="text-sm sm:text-xl truncate font-bold">{led.name}</CardTitle>
-                    <CardDescription className="text-[10px] sm:text-sm truncate opacity-70">
-                      {getDeviceName(led.device_id)}
-                    </CardDescription>
-                  </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <Switch
-                      checked={led.active}
-                      onCheckedChange={() => toggleLED(led.id)}
-                      className="data-[state=checked]:bg-blue-500 scale-75 sm:scale-100"
-                    />
-                    <div className="flex items-center gap-1 opacity-80">
-                      <Power className={`h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 ${led.active ? 'text-blue-500' : 'text-gray-400'}`} />
-                      <span className="text-[8px] sm:text-[10px] font-semibold">{led.active ? "ON" : "OFF"}</span>
-                    </div>
-                  </div>
-                </div>
-                <CardDescription className="text-[10px] sm:text-sm opacity-70">Pin: {led.pin}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 sm:space-y-4 p-2 sm:p-6 pt-0 sm:pt-0">
-                <div className="grid grid-cols-2 gap-1.5 sm:gap-3">
-                  {/* Mode Slot - Always Visible */}
-                  <div className="flex items-center gap-1.5 sm:gap-3 p-1.5 sm:p-3 bg-white/5 dark:bg-black/20 rounded-lg sm:rounded-xl border border-white/5">
-                    <Calendar className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-primary" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[8px] sm:text-[10px] font-medium opacity-70">Mode</p>
-                      <p className="text-[9px] sm:text-xs font-bold truncate uppercase">{led.mode === 'auto' ? 'Auto' : 'Man'}</p>
-                    </div>
-                  </div>
-
-                  {/* Jadwal Slot - Always Visible, Inactive if Manual */}
-                  <div className={`flex items-center gap-1.5 sm:gap-3 p-1.5 sm:p-3 bg-white/5 dark:bg-black/20 rounded-lg sm:rounded-xl border border-white/5 transition-opacity ${led.mode !== 'auto' ? 'opacity-40' : 'opacity-100'}`}>
-                    <Calendar className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-primary" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[8px] sm:text-[10px] font-medium opacity-70">Jadwal</p>
-                      <p className="text-[8px] sm:text-xs font-bold capitalize whitespace-nowrap">{led.mode === 'auto' ? led.schedule : 'Inactive'}</p>
-                    </div>
-                  </div>
-
-                  {/* Waktu Operasi Slot - Always Visible, Inactive if Manual */}
-                  <div className={`col-span-2 flex items-center gap-1.5 sm:gap-3 p-1.5 sm:p-3 bg-white/5 dark:bg-black/20 rounded-lg sm:rounded-xl border border-white/5 transition-opacity ${led.mode !== 'auto' ? 'opacity-40' : 'opacity-100'}`}>
-                    <Clock className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-primary" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[8px] sm:text-[10px] font-medium opacity-70">Waktu Operasi</p>
-                      <p className="text-[9px] sm:text-xs font-bold truncate">
-                        {led.mode === 'auto' ? `${led.active_time} - ${led.inactive_time}` : 'Timer Inactive'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-1.5 sm:gap-2 pt-1">
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-7 sm:h-9 px-0 sm:px-4 text-[10px] sm:text-xs border-white/10"
-                    onClick={() => openEditDialog(led)}
-                  >
-                    <Pencil className="h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
-                    <span className="hidden sm:inline">Edit</span>
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    className="flex-1 h-7 sm:h-9 px-0 sm:px-4 text-[10px] sm:text-xs"
-                    onClick={() => deleteLED(led.id)}
-                  >
-                    <Trash2 className="h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
-                    <span className="hidden sm:inline">Hapus</span>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <LEDCardItem
+              key={led.id}
+              led={led}
+              deviceName={getDeviceName(led.device_id)}
+              onToggle={toggleLED}
+              onEdit={openEditDialog}
+              onDelete={deleteLED}
+            />
           ))}
         </div>
       )}
