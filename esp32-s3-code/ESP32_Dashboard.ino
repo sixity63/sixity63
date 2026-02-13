@@ -6,6 +6,7 @@
  * - Mengirim data sensor ke cloud database
  * - Kontrol LED berdasarkan jadwal dari web dashboard
  * - Auto-reconnect WiFi
+ * - Kalibrasi Soil Sensor (WET: 2415, DRY: 3275)
  */
 
 #include <WiFi.h>
@@ -13,39 +14,48 @@
 #include <ArduinoJson.h>
 #include <DHT.h>
 #include <time.h>
+#include <Preferences.h>  // Untuk menyimpan kalibrasi ke flash
+#include <vector>
 
 // ===== KONFIGURASI WiFi =====
 const char* ssid = "AWP LAW OFFICE";          // Ganti dengan SSID WiFi Anda
 const char* password = "07051966";   // Ganti dengan password WiFi Anda
 
 // ===== KONFIGURASI SUPABASE =====
-const char* supabaseUrl = "https://igjkpgdfybjaazzgfqtc.supabase.co";
-const char* supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlnamtwZ2RmeWJqYWF6emdmcXRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMzODc0NjIsImV4cCI6MjA3ODk2MzQ2Mn0.v4QwN5qky2xx1xHmDjGOlNl-5Up4wLCM9H6zmCaSvjk";
+const char* supabaseUrl = "https://pnrwifncqzkgxdwepdcd.supabase.co";
+const char* supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucndpZm5jcXprZ3hkd2VwZGNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc1MDgyMDAsImV4cCI6MjA4MzA4NDIwMH0.pYrCCVv3WTJu9imNTgi1IMF3Lscc7CKwiZ8DiRFWMso";
 
 // ===== DEVICE ID (GANTI DENGAN ID DEVICE ANDA) =====
 // Setelah mendaftar device di dashboard, masukkan device_id di sini
-String deviceId = "10949e22-ce9b-45f3-84ed-ad7ad93356a8";  // Akan didapat dari dashboard
+String deviceId = "b2a0b69e-fc80-444d-8d50-b30535ff74c5";  // Akan didapat dari dashboard
 
 // ===== KONFIGURASI SENSOR =====
-#define DHTPIN 5          // Pin untuk DHT sensor (suhu & kelembapan udara)
-#define DHTTYPE DHT22      // Tipe DHT sensor (DHT11 atau DHT22)
-#define SOIL_SENSOR_PIN 4 // Pin analog untuk sensor kelembapan tanah
+#define DHTPIN 5          // Pin 11 untuk DHT sensor (suhu & kelembapan udara)
+#define DHTTYPE DHT11      // Tipe DHT sensor (DHT11 atau DHT22)
+#define SOIL_SENSOR_PIN 4 // Pin 4 analog untuk sensor kelembapan tanah
 
 // ===== KONFIGURASI TDS METER (REVISI) =====
-#define TDS_PIN 6             // ADC1 pin, jangan pakai ADC2
+#define TDS_PIN 3            // ADC1 pin 3, jangan pakai ADC2
 #define NUM_SAMPLES 30
 #define ADC_WIDTH 4095.0
 #define VREF 3.3
 #define TEMP_COMP_COEFF 0.02
 float tdsCalibration = 3.22;
 
+// ===== KONFIGURASI KALIBRASI SOIL SENSOR =====
+// NILAI KALIBRASI BERDASARKAN PENGUKURAN ANDA:
+int soilWetValue = 2415;    
+int soilDryValue = 3275;    // Nilai ADC saat KERING (dari pengukuran Anda)
+int soilRawValue = 0;       // Untuk menyimpan raw value
+
+Preferences preferences;
 DHT dht(DHTPIN, DHTTYPE);
 
 // ===== TIMING =====
 unsigned long lastSensorRead = 0;
 const long sensorInterval = 5000;  // Kirim data sensor setiap 5 detik
 unsigned long lastLEDCheck = 0;
-const long ledCheckInterval = 300; // Cek konfigurasi LED setiap 2 detik
+const long ledCheckInterval = 100; // Cek konfigurasi LED setiap 2 detik
 
 const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 28800;  // GMT+8 untuk WITA (8 * 3600)
@@ -61,9 +71,36 @@ struct LEDConfig {
   String inactiveTime;
   String schedule;
   bool isActive;
+  String mode;
 };
 
 std::vector<LEDConfig> ledConfigs;
+
+// ===== FUNGSI PROTOTYPE =====
+void connectWiFi();
+void initNTP();
+void readAndSendSensorData();
+void sendSensorData(float temp, float soilHum, float airHum, float tdsValue);
+void fetchLEDConfigs();
+void updateLEDsBasedOnSchedule();
+void updateLEDStatus(String ledId, bool isActive);
+void handleSerialCommands();
+float calibrateSoilMoisture(int rawValue);
+float readVoltageAveraged(int pin, int samples);
+float voltageToTDS(float voltage);
+float applyTemperatureCompensation(float tdsRaw, float tempC);
+
+// ===== FUNGSI UTILITY =====
+void parseTime(String timeStr, int &hour, int &minute) {
+  int colonIndex = timeStr.indexOf(':');
+  if (colonIndex != -1) {
+    hour = timeStr.substring(0, colonIndex).toInt();
+    minute = timeStr.substring(colonIndex + 1).toInt();
+  } else {
+    hour = 0;
+    minute = 0;
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -72,6 +109,18 @@ void setup() {
   Serial.println("\n===== ESP32-S3 Dashboard Controller =====");
   Serial.println("Dilengkapi dengan TDS Meter Monitoring");
   Serial.println("=========================================");
+  
+  // Load kalibrasi dari flash memory (jika ada)
+  preferences.begin("soil-calib", false);
+  soilWetValue = preferences.getInt("wet", 2415);  // Default dari pengukuran Anda
+  soilDryValue = preferences.getInt("dry", 3275);  // Default dari pengukuran Anda
+  preferences.end();
+  
+  Serial.println("=== KALIBRASI SOIL SENSOR ===");
+  Serial.printf("Nilai BASAH (wet): %d\n", soilWetValue);
+  Serial.printf("Nilai KERING (dry): %d\n", soilDryValue);
+  Serial.printf("Rentang: %d - %d\n", soilWetValue, soilDryValue);
+  Serial.println("=============================");
   
   // Inisialisasi sensor
   dht.begin();
@@ -95,7 +144,10 @@ void setup() {
   
   Serial.println("Setup selesai!");
   Serial.println("Menunggu data sensor...");
-  Serial.println("=========================================");
+  Serial.println("=========================================\n");
+  
+  // Tampilkan menu kalibrasi
+  Serial.println("Ketik 'CALIB' di Serial Monitor untuk menu kalibrasi");
 }
 
 void loop() {
@@ -118,6 +170,81 @@ void loop() {
     lastLEDCheck = currentMillis;
     fetchLEDConfigs();
     updateLEDsBasedOnSchedule();
+  }
+  
+  // Handle serial commands untuk kalibrasi
+  handleSerialCommands();
+}
+
+// ===== FUNGSI KALIBRASI SOIL SENSOR =====
+float calibrateSoilMoisture(int rawValue) {
+  // Validasi nilai kalibrasi
+  if (soilDryValue <= soilWetValue) {
+    Serial.println("⚠️  Soil calibration invalid! Using default mapping.");
+    return map(constrain(rawValue, 0, 4095), 0, 4095, 0, 100);
+  }
+  
+  // Kalibrasi linear dengan nilai Anda
+  // Rumus: percentage = 100 * (dry - raw) / (dry - wet)
+  float percentage = 100.0 * (soilDryValue - rawValue) / (soilDryValue - soilWetValue);
+  
+  // Constrain ke 0-100%
+  return constrain(percentage, 0, 100);
+}
+
+// ===== HANDLE SERIAL COMMANDS =====
+void handleSerialCommands() {
+  if (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+    
+    if (cmd.equalsIgnoreCase("CALIB")) {
+      Serial.println("\n=== KALIBRASI SOIL SENSOR ===");
+      Serial.println("1. Masukkan sensor ke air/tanah BASAH");
+      Serial.println("   Ketik 'WET' untuk menyimpan nilai basah");
+      Serial.println("2. Keringkan sensor (udara kering)");
+      Serial.println("   Ketik 'DRY' untuk menyimpan nilai kering");
+      Serial.println("3. Ketik 'SAVE' untuk menyimpan ke flash memory");
+      Serial.println("4. Ketik 'SHOW' untuk melihat nilai saat ini");
+      Serial.println("5. Ketik 'RESET' untuk reset ke nilai default Anda");
+      Serial.println("===============================\n");
+    }
+    else if (cmd.equalsIgnoreCase("WET")) {
+      soilWetValue = soilRawValue;
+      Serial.printf("✅ Nilai BASAH disimpan: %d\n", soilWetValue);
+    }
+    else if (cmd.equalsIgnoreCase("DRY")) {
+      soilDryValue = soilRawValue;
+      Serial.printf("✅ Nilai KERING disimpan: %d\n", soilDryValue);
+    }
+    else if (cmd.equalsIgnoreCase("SAVE")) {
+      preferences.begin("soil-calib", false);
+      preferences.putInt("wet", soilWetValue);
+      preferences.putInt("dry", soilDryValue);
+      preferences.end();
+      Serial.println("✅ Kalibrasi disimpan ke flash memory!");
+    }
+    else if (cmd.equalsIgnoreCase("SHOW")) {
+      Serial.printf("\n=== NILAI KALIBRASI SAAT INI ===\n");
+      Serial.printf("Nilai BASAH (wet): %d\n", soilWetValue);
+      Serial.printf("Nilai KERING (dry): %d\n", soilDryValue);
+      Serial.printf("Nilai RAW saat ini: %d\n", soilRawValue);
+      Serial.printf("Rentang ADC: %d - %d\n", soilWetValue, soilDryValue);
+      Serial.printf("===============================\n");
+    }
+    else if (cmd.equalsIgnoreCase("RESET")) {
+      soilWetValue = 2415;
+      soilDryValue = 3275;
+      Serial.println("✅ Kalibrasi direset ke nilai default Anda");
+      Serial.printf("  Wet: %d, Dry: %d\n", soilWetValue, soilDryValue);
+    }
+    else if (cmd.equalsIgnoreCase("TEST")) {
+      Serial.println("\n=== TEST KALIBRASI ===");
+      Serial.println("Basah (100%): " + String(calibrateSoilMoisture(soilWetValue)) + "%");
+      Serial.println("Kering (0%): " + String(calibrateSoilMoisture(soilDryValue)) + "%");
+      Serial.println("Mid-point: " + String(calibrateSoilMoisture((soilWetValue + soilDryValue) / 2)) + "%");
+      Serial.println("=====================\n");
+    }
   }
 }
 
@@ -214,12 +341,21 @@ void readAndSendSensorData() {
     Serial.printf("✅ Kelembapan Udara: %.1f%%\n", airHumidity);
   }
   
-  // Baca sensor kelembapan tanah (0-4095 untuk ESP32)
-  int soilValue = analogRead(SOIL_SENSOR_PIN);
-  if (soilValue >= 0) {
-    soilHumidity = map(soilValue, 0, 4095, 0, 100);
+  // Baca dan kalibrasi sensor tanah dengan nilai Anda
+  soilRawValue = analogRead(SOIL_SENSOR_PIN);
+  if (soilRawValue >= 0) {
+    soilHumidity = calibrateSoilMoisture(soilRawValue);
     soilSuccess = true;
-    Serial.printf("✅ Kelembapan Tanah: %.1f%% (Raw: %d)\n", soilHumidity, soilValue);
+    
+    Serial.printf("✅ Kelembapan Tanah: %.1f%% (Raw: %d)\n", soilHumidity, soilRawValue);
+    
+    // Kategori kelembaban tanah berdasarkan persentase
+    Serial.print("   Status Tanah: ");
+    if (soilHumidity >= 80) Serial.println("SANGAT BASAH");
+    else if (soilHumidity >= 60) Serial.println("BASAH");
+    else if (soilHumidity >= 40) Serial.println("NORMAL");
+    else if (soilHumidity >= 20) Serial.println("KERING");
+    else Serial.println("SANGAT KERING");
   } else {
     Serial.println("❌ Error: Gagal membaca sensor tanah!");
   }
@@ -278,34 +414,34 @@ void sendSensorData(float temp, float soilHum, float airHum, float tdsValue) {
     Serial.println("❌ WiFi tidak terhubung!");
     return;
   }
-  
+
   HTTPClient http;
   String url = String(supabaseUrl) + "/rest/v1/sensor_data";
-  
+
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("apikey", supabaseKey);
   http.addHeader("Authorization", "Bearer " + String(supabaseKey));
   http.addHeader("Prefer", "return=minimal");
-  
+
   // Buat JSON payload
   StaticJsonDocument<256> doc;
   doc["device_id"] = deviceId;
-  
+
   // Hanya tambahkan field jika nilainya valid
   if (!isnan(temp)) doc["temperature"] = temp;
   if (!isnan(soilHum)) doc["soil_humidity"] = soilHum;
   if (!isnan(airHum)) doc["air_humidity"] = airHum;
   if (!isnan(tdsValue)) doc["tds"] = tdsValue;
-  
+
   String jsonPayload;
   serializeJson(doc, jsonPayload);
-  
+
   Serial.println("☁️  Mengirim data ke cloud...");
   Serial.printf("Payload: %s\n", jsonPayload.c_str());
-  
+
   int httpCode = http.POST(jsonPayload);
-  
+
   if (httpCode > 0) {
     if (httpCode == 201 || httpCode == 200) {
       Serial.println("✅ Data berhasil dikirim!");
@@ -319,7 +455,7 @@ void sendSensorData(float temp, float soilHum, float airHum, float tdsValue) {
   } else {
     Serial.printf("❌ Error: %s\n", http.errorToString(httpCode).c_str());
   }
-  
+
   http.end();
 }
 
@@ -356,61 +492,66 @@ void fetchLEDConfigs() {
         config.inactiveTime = obj["inactive_time"].as<String>();
         config.schedule = obj["schedule"].as<String>();
         config.isActive = obj["is_active"].as<bool>();
+        config.mode = obj["mode"].as<String>();
+        if (config.mode.length() == 0) {
+          config.mode = "manual";  // Default ke manual jika kosong
+        }
         
         ledConfigs.push_back(config);
         
         // Setup pin sebagai output
         pinMode(config.pin, OUTPUT);
+        
+        // Untuk mode manual, langsung set LED sesuai status is_active
+        if (config.mode == "manual") {
+          digitalWrite(config.pin, config.isActive ? HIGH : LOW);
+        }
       }
       
-      Serial.printf("💡 Loaded %d LED configurations\n", ledConfigs.size());
-    } else {
-      Serial.println("❌ Error parsing LED configs JSON");
+      Serial.printf("Loaded %d LED configurations\n", ledConfigs.size());
     }
-  } else {
-    Serial.printf("❌ Error fetching LED configs: %d\n", httpCode);
   }
   
   http.end();
 }
 
 void updateLEDsBasedOnSchedule() {
-  if (!timeInitialized) {
-    Serial.println("Waktu belum tersinkronisasi, skip update LED");
-    return;
-  }
-  
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
-    Serial.println("Gagal mendapatkan waktu lokal");
-    return;
-  }
+  bool hasTime = timeInitialized && getLocalTime(&timeinfo);
   
-  int currentHour = timeinfo.tm_hour;
-  int currentMin = timeinfo.tm_min;
-  int currentDayOfWeek = timeinfo.tm_wday; // 0 = Minggu, 1 = Senin, dst
-  int currentDayOfMonth = timeinfo.tm_mday;
+  int currentHour = 0, currentMin = 0, currentDayOfWeek = 0, currentDayOfMonth = 1;
+  if (hasTime) {
+    currentHour = timeinfo.tm_hour;
+    currentMin = timeinfo.tm_min;
+    currentDayOfWeek = timeinfo.tm_wday;
+    currentDayOfMonth = timeinfo.tm_mday;
+  }
   
   Serial.printf("\n--- Update LED (Waktu: %02d:%02d, Hari: %d, Tanggal: %d) ---\n", 
                 currentHour, currentMin, currentDayOfWeek, currentDayOfMonth);
   
   for (LEDConfig& config : ledConfigs) {
+    // Mode manual: LED dikontrol langsung dari dashboard, tidak perlu jadwal
+    if (config.mode == "manual") {
+      digitalWrite(config.pin, config.isActive ? HIGH : LOW);
+      Serial.printf("LED '%s' (Pin %d): %s | Mode: MANUAL\n",
+                    config.name.c_str(), config.pin, 
+                    config.isActive ? "ON" : "OFF");
+      continue;
+    }
+    
+    // Mode auto: LED dikontrol berdasarkan jadwal waktu
+    if (!hasTime) {
+      Serial.println("Waktu belum tersinkronisasi, skip LED mode auto");
+      continue;
+    }
+    
+    // Parse waktu aktif dan tidak aktif
+    int activeHour, activeMin, inactiveHour, inactiveMin;
+    parseTime(config.activeTime, activeHour, activeMin);
+    parseTime(config.inactiveTime, inactiveHour, inactiveMin);
+    
     bool shouldBeOn = false;
-    
-    // Parse active_time (format: "HH:MM:SS" atau "HH:MM")
-    int activeHour = 0, activeMin = 0;
-    int inactiveHour = 23, inactiveMin = 59;
-    
-    if (config.activeTime.length() >= 5) {
-      activeHour = config.activeTime.substring(0, 2).toInt();
-      activeMin = config.activeTime.substring(3, 5).toInt();
-    }
-    
-    if (config.inactiveTime.length() >= 5) {
-      inactiveHour = config.inactiveTime.substring(0, 2).toInt();
-      inactiveMin = config.inactiveTime.substring(3, 5).toInt();
-    }
-    
     // Konversi ke menit untuk perbandingan lebih mudah
     int currentTimeInMins = currentHour * 60 + currentMin;
     int activeTimeInMins = activeHour * 60 + activeMin;
@@ -445,7 +586,7 @@ void updateLEDsBasedOnSchedule() {
     // Update LED
     digitalWrite(config.pin, shouldBeOn ? HIGH : LOW);
     
-    Serial.printf("LED '%s' (Pin %d): %s | Jadwal: %s | Waktu Aktif: %s-%s\n",
+    Serial.printf("LED '%s' (Pin %d): %s | Mode: AUTO | Jadwal: %s | Waktu Aktif: %s-%s\n",
                   config.name.c_str(), config.pin, 
                   shouldBeOn ? "ON" : "OFF",
                   config.schedule.c_str(),

@@ -28,12 +28,12 @@ export function AppSidebar() {
   return (
     <Sidebar
       collapsible="offcanvas"
-      className="border-r border-blue-200/20 bg-blue-50/10 md:backdrop-blur-md md:shadow-[0_8px_32px_rgba(31,38,135,0.37)] will-change-[transform] z-[100]"
+      className="border-r border-white/5 bg-black/5 backdrop-blur-md shadow-none will-change-[transform] z-[100] [&>div[data-sidebar=sidebar]]:bg-transparent"
     >
       <SidebarContent className="bg-transparent">
         <SidebarGroup>
           {open && (
-            <SidebarGroupLabel className="text-lg font-bold text-primary px-4 py-6 mx-2 my-4 rounded-2xl bg-blue-100/20 md:backdrop-blur-sm md:shadow-[inset_0_2px_4px_rgba(255,255,255,0.1),inset_0_-2px_4px_rgba(0,0,0,0.1)] border border-blue-200/30 flex justify-between items-center">
+            <SidebarGroupLabel className="text-lg font-bold text-primary px-4 py-6 mx-2 my-4 rounded-2xl bg-white/5 backdrop-blur-sm shadow-none border border-white/5 flex justify-between items-center">
               <div className="flex items-center">
                 <span className="text-primary">Six</span>
                 <span className="text-muted-foreground">ity</span>
@@ -47,13 +47,13 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
-                    className="rounded-xl bg-blue-50/30 md:backdrop-blur-sm md:shadow-[inset_0_1px_2px_rgba(255,255,255,0.15),inset_0_-1px_2px_rgba(0,0,0,0.1)] border border-blue-200/30 md:hover:shadow-[inset_0_2px_4px_rgba(255,255,255,0.2),inset_0_-2px_4px_rgba(0,0,0,0.15)] transition-transform duration-200 will-change-[transform] hover:scale-[1.02] active:scale-[0.98] hover:bg-blue-100/40 motion-reduce:transition-none"
+                    className="rounded-xl bg-transparent border border-transparent hover:border-white/10 hover:bg-white/10 hover:backdrop-blur-sm transition-all duration-200 will-change-[transform] hover:scale-[1.02] active:scale-[0.98] motion-reduce:transition-none"
                   >
                     <NavLink
                       to={item.url}
                       end
                       className="flex items-center gap-3 px-4 py-3"
-                      activeClassName="shadow-[inset_0_1px_2px_rgba(0,0,0,0.2),inset_0_-1px_2px_rgba(255,255,255,0.1)] bg-gradient-to-br from-primary/10 to-primary/5"
+                      activeClassName="shadow-[inset_0_2px_4px_rgba(0,0,0,0.2),inset_0_-2px_4px_rgba(255,255,255,0.2)] bg-primary/20 border-primary/30"
                     >
                       <item.icon className="h-5 w-5" />
                       {open && <span>{item.title}</span>}
@@ -66,7 +66,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <div className="mt-auto px-4 py-4">
-          <div className="rounded-xl bg-gradient-to-br from-background to-background/90 shadow-[inset_0_1px_2px_rgba(255,255,255,0.15),inset_0_-1px_2px_rgba(0,0,0,0.1)] border border-border/20 p-2">
+          <div className="rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 p-2">
             <LogoutButton showText={open} />
           </div>
         </div>

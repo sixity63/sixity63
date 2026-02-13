@@ -1,0 +1,766 @@
+import { useState, useEffect } from "react";
+import { Plus, Power, Trash2, Calendar, Clock, Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+
+interface LED {
+  id: string;
+  device_id: string;
+  name: string;
+  pin: number;
+  active: boolean;
+  schedule: string;
+  active_time: string;
+  inactive_time: string;
+  mode: 'manual' | 'auto';
+}
+
+interface Device {
+  id: string;
+  name: string;
+  mac_address: string;
+}
+
+interface LEDFormData {
+  name: string;
+  pin: number;
+  device_id: string;
+  schedule: "daily" | "weekly" | "monthly";
+  startTime: string;
+  endTime: string;
+  mode: 'manual' | 'auto';
+}
+
+const LEDFormFields = ({
+  formData,
+  setFormData,
+  devices,
+  showDeviceSelect = true
+}: {
+  formData: LEDFormData;
+  setFormData: (data: LEDFormData) => void;
+  devices: Device[];
+  showDeviceSelect?: boolean;
+}) => (
+  <div className="grid gap-6 py-4">
+    {showDeviceSelect && (
+      <div className="grid gap-2">
+        <Label htmlFor="device" className="text-foreground/80">Device ESP32</Label>
+        <Select
+          value={formData.device_id}
+          onValueChange={(value) => setFormData({ ...formData, device_id: value })}
+        >
+          <SelectTrigger className="bg-white/10 border-white/20">
+            <SelectValue placeholder="Pilih device" />
+          </SelectTrigger>
+          <SelectContent>
+            {devices.map((device) => (
+              <SelectItem key={device.id} value={device.id}>
+                {device.name} ({device.mac_address})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    )}
+    <div className="grid gap-2">
+      <Label htmlFor="name" className="text-foreground/80">Nama LED</Label>
+      <Input
+        id="name"
+        placeholder="Contoh: LED Taman"
+        value={formData.name}
+        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        className="bg-white/10 border-white/20"
+      />
+    </div>
+    <div className="grid gap-2">
+      <Label htmlFor="pin" className="text-foreground/80">Pin GPIO (3-35)</Label>
+      <Input
+        id="pin"
+        type="number"
+        min="3"
+        max="35"
+        value={formData.pin}
+        onChange={(e) => setFormData({ ...formData, pin: parseInt(e.target.value) })}
+        className="bg-white/10 border-white/20"
+      />
+    </div>
+    <div className="grid gap-2">
+      <Label htmlFor="schedule" className="text-foreground/80">Tipe Jadwal</Label>
+      <Select
+        value={formData.schedule}
+        onValueChange={(value: "daily" | "weekly" | "monthly") =>
+          setFormData({ ...formData, schedule: value })
+        }
+      >
+        <SelectTrigger className="bg-white/10 border-white/20">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="daily">Harian</SelectItem>
+          <SelectItem value="weekly">Mingguan</SelectItem>
+          <SelectItem value="monthly">Bulanan</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+    <div className="grid gap-2">
+      <Label htmlFor="mode" className="text-foreground/80">Mode Kontrol</Label>
+      <Select
+        value={formData.mode}
+        onValueChange={(value: "manual" | "auto") =>
+          setFormData({ ...formData, mode: value })
+        }
+      >
+        <SelectTrigger className="bg-white/10 border-white/20">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="manual">Manual</SelectItem>
+          <SelectItem value="auto">Otomatis (Jadwal)</SelectItem>
+        </SelectContent>
+      </Select>
+      <p className="text-[10px] text-muted-foreground opacity-70">
+        Manual: Kontrol manual via tombol. Otomatis: LED aktif/nonaktif sesuai jadwal waktu.
+      </p>
+    </div>
+    {formData.mode === 'auto' && (
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="startTime" className="text-foreground/80">Mulai</Label>
+          <Input
+            id="startTime"
+            type="time"
+            value={formData.startTime}
+            onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+            className="bg-white/10 border-white/20"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="endTime" className="text-foreground/80">Selesai</Label>
+          <Input
+            id="endTime"
+            type="time"
+            value={formData.endTime}
+            onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+            className="bg-white/10 border-white/20"
+          />
+        </div>
+      </div>
+    )}
+  </div>
+);
+
+// Memoized LED Card Component for Performance
+const LEDCardItem = ({
+  led,
+  deviceName,
+  onToggle,
+  onEdit,
+  onDelete
+}: {
+  led: LED;
+  deviceName: string;
+  onToggle: (id: string) => void;
+  onEdit: (led: LED) => void;
+  onDelete: (id: string) => void;
+}) => {
+  return (
+    <Card className="relative overflow-hidden transition-all border-2 border-white/10 bg-card/90 dark:bg-transparent dark:border-white/10 w-[calc(50%-0.4rem)] sm:w-full max-w-none sm:max-w-[80mm] group transform-gpu">
+      <div className={`absolute top-0 left-0 right-0 h-1.5 ${led.active ? 'bg-blue-500' : 'bg-gray-400'}`} />
+      <CardHeader className="p-2 sm:p-6">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0 mr-1">
+            <CardTitle className="text-sm sm:text-xl truncate font-bold">{led.name}</CardTitle>
+            <CardDescription className="text-[10px] sm:text-sm truncate opacity-70">
+              {deviceName}
+            </CardDescription>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <div
+              onClick={(e) => { e.stopPropagation(); onToggle(led.id); }}
+              className={`relative w-12 h-7 sm:w-14 sm:h-8 rounded-full cursor-pointer transition-all duration-500 ease-out p-1
+                ${led.active
+                  ? 'bg-gradient-to-br from-blue-500/20 to-blue-600/20 shadow-[inset_0_2px_8px_rgba(0,0,0,0.2),0_4px_10px_rgba(59,130,246,0.3)] border-blue-500/30'
+                  : 'bg-gradient-to-br from-gray-200/20 to-gray-300/20 dark:from-white/10 dark:to-white/5 shadow-[inset_0_2px_8px_rgba(0,0,0,0.2)] border-white/10'}
+                border group overflow-visible`}
+            >
+              {/* Liquid Highlight */}
+              <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+
+              {/* Knob */}
+              <div
+                className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full shadow-[0_2px_5px_rgba(0,0,0,0.3),inset_0_1px_3px_rgba(255,255,255,0.9)]
+                  bg-gradient-to-b from-white via-gray-100 to-gray-300
+                  transition-transform duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]
+                  flex items-center justify-center
+                  ${led.active ? 'translate-x-[1.25rem] sm:translate-x-[1.5rem]' : 'translate-x-0'}
+                `}
+              >
+                {/* Knob Reflection */}
+                <div className="absolute top-1 right-1.5 w-2 h-1.5 rounded-full bg-white opacity-80 blur-[0.5px]" />
+
+                {/* Activity Indicator Dot */}
+                <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-all duration-300 ${led.active ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' : 'bg-gray-300/50'}`} />
+              </div>
+            </div>
+            <div className="flex items-center gap-1 opacity-80">
+              <Power className={`h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 ${led.active ? 'text-blue-500' : 'text-gray-400'}`} />
+              <span className="text-[8px] sm:text-[10px] font-semibold">{led.active ? "ON" : "OFF"}</span>
+            </div>
+          </div>
+        </div>
+        <CardDescription className="text-[10px] sm:text-sm opacity-70">Pin: {led.pin}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2 sm:space-y-4 p-2 sm:p-6 pt-0 sm:pt-0">
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-3">
+          {/* Mode Slot */}
+          <div className="flex items-center gap-1.5 sm:gap-3 p-1.5 sm:p-3 bg-white/5 dark:bg-transparent rounded-lg sm:rounded-xl border border-white/5">
+            <Calendar className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-primary" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] sm:text-[10px] font-medium opacity-70">Mode</p>
+              <p className="text-[9px] sm:text-xs font-bold truncate uppercase">{led.mode === 'auto' ? 'Auto' : 'Man'}</p>
+            </div>
+          </div>
+
+          {/* Jadwal Slot */}
+          <div className={`flex items-center gap-1.5 sm:gap-3 p-1.5 sm:p-3 bg-white/5 dark:bg-transparent rounded-lg sm:rounded-xl border border-white/5 transition-opacity ${led.mode !== 'auto' ? 'opacity-40' : 'opacity-100'}`}>
+            <Calendar className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-primary" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] sm:text-[10px] font-medium opacity-70">Jadwal</p>
+              <p className="text-[8px] sm:text-xs font-bold capitalize whitespace-nowrap">{led.mode === 'auto' ? led.schedule : 'Inactive'}</p>
+            </div>
+          </div>
+
+          {/* Waktu Operasi Slot */}
+          <div className={`col-span-2 flex items-center gap-1.5 sm:gap-3 p-1.5 sm:p-3 bg-white/5 dark:bg-transparent rounded-lg sm:rounded-xl border border-white/5 transition-opacity ${led.mode !== 'auto' ? 'opacity-40' : 'opacity-100'}`}>
+            <Clock className="h-3.5 w-3.5 sm:h-5 sm:w-5 text-primary" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] sm:text-[10px] font-medium opacity-70">Waktu Operasi</p>
+              <p className="text-[9px] sm:text-xs font-bold truncate">
+                {led.mode === 'auto' ? `${led.active_time} - ${led.inactive_time}` : 'Timer Inactive'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-1.5 sm:gap-2 pt-1">
+          <Button
+            variant="outline"
+            className="flex-1 h-7 sm:h-9 px-0 sm:px-4 text-[10px] sm:text-xs border-white/10"
+            onClick={() => onEdit(led)}
+          >
+            <Pencil className="h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
+            <span className="hidden sm:inline">Edit</span>
+          </Button>
+          <Button
+            variant="destructive"
+            className="flex-1 h-7 sm:h-9 px-0 sm:px-4 text-[10px] sm:text-xs"
+            onClick={() => onDelete(led.id)}
+          >
+            <Trash2 className="h-3 w-3 sm:mr-2 sm:h-3.5 sm:w-3.5" />
+            <span className="hidden sm:inline">Hapus</span>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const LEDControl = () => {
+  const { user } = useAuth();
+  const [leds, setLeds] = useState<LED[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingLED, setEditingLED] = useState<LED | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const defaultFormData: LEDFormData = {
+    name: "",
+    pin: 5,
+    device_id: "",
+    schedule: "daily",
+    startTime: "06:00",
+    endTime: "18:00",
+    mode: 'manual'
+  };
+
+  const [newLED, setNewLED] = useState<LEDFormData>(defaultFormData);
+  const [editFormData, setEditFormData] = useState<LEDFormData>(defaultFormData);
+
+  useEffect(() => {
+    if (user) {
+      fetchDevices();
+      fetchLEDs();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Subscribe to real-time changes for led_configs
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'led_configs',
+        },
+        () => {
+          // Re-fetch LEDs to sync across all devices silently
+          fetchLEDs(true);
+        }
+      )
+      .subscribe();
+
+    // Subscribe to device changes
+    const deviceChannel = supabase
+      .channel('led-control-devices')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'devices' },
+        () => {
+          fetchDevices();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      supabase.removeChannel(deviceChannel);
+    };
+  }, [user]);
+
+  // Frontend Schedule Checker: Runs every second for real-time accuracy
+  useEffect(() => {
+    if (!user || leds.length === 0) return;
+
+    const checkSchedules = async () => {
+      const now = new Date();
+      // Format to HH:mm for comparison
+      const currentTimeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+      for (const led of leds) {
+        if (led.mode !== 'auto') continue;
+
+        const { active_time, inactive_time, active: currentStatus } = led;
+
+        // Ensure we only compare HH:mm parts
+        const startTime = active_time?.substring(0, 5);
+        const endTime = inactive_time?.substring(0, 5);
+
+        if (!startTime || !endTime) continue;
+
+        let shouldBeActive = false;
+
+        if (startTime <= endTime) {
+          // Normal case: e.g., 08:00 to 18:00
+          shouldBeActive = currentTimeString >= startTime && currentTimeString < endTime;
+        } else {
+          // Overnight case: e.g., 22:00 to 06:00
+          shouldBeActive = currentTimeString >= startTime || currentTimeString < endTime;
+        }
+
+        if (shouldBeActive !== currentStatus) {
+          console.log(`[Realtime Schedule] Updating LED ${led.name} to ${shouldBeActive ? 'ON' : 'OFF'}`);
+          try {
+            const { error } = await supabase
+              .from('led_configs')
+              .update({ is_active: shouldBeActive })
+              .eq('id', led.id);
+
+            if (error) throw error;
+          } catch (err) {
+            console.error('Failed to auto-toggle LED:', err);
+          }
+        }
+      }
+    };
+
+    // Initial check
+    checkSchedules();
+
+    const interval = setInterval(checkSchedules, 1000); // Check every 1 second
+    return () => clearInterval(interval);
+  }, [user, leds]);
+
+  // Polling fallback and focus handler for synchronization
+  useEffect(() => {
+    if (!user) return;
+
+    // Fetch immediately on focus/visibility change
+    const handleFocus = () => {
+      fetchLEDs(true);
+      fetchDevices();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    // Poll every 5 seconds as fallback for realtime connection issues
+    const pollInterval = setInterval(() => {
+      fetchLEDs(true);
+    }, 5000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+      clearInterval(pollInterval);
+    };
+  }, [user]);
+
+  const fetchDevices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('devices')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setDevices(data || []);
+    } catch (error) {
+      console.error('Error fetching devices:', error);
+      toast.error('Gagal memuat daftar device');
+    }
+  };
+
+  const fetchLEDs = async (silent = false) => {
+    if (!user) return;
+
+    try {
+      if (!silent) setLoading(true);
+      const { data, error } = await supabase
+        .from('led_configs')
+        .select(`
+          *,
+          devices!inner(user_id)
+        `)
+        .eq('devices.user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setLeds(data?.map(led => ({
+        id: led.id,
+        device_id: led.device_id,
+        name: led.name,
+        pin: led.pin,
+        active: led.is_active || false,
+        schedule: led.schedule,
+        active_time: led.active_time || "06:00",
+        inactive_time: led.inactive_time || "18:00",
+        mode: (led.mode as 'manual' | 'auto') || 'manual'
+      })) || []);
+    } catch (error) {
+      console.error('Error fetching LEDs:', error);
+      if (!silent) toast.error('Gagal memuat daftar LED');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  const toggleLED = async (id: string) => {
+    if (!user) {
+      toast.error("User tidak terautentikasi");
+      return;
+    }
+    const led = leds.find(l => l.id === id);
+    if (!led) return;
+
+    const originalActive = led.active;
+    const newActiveState = !originalActive;
+
+    // Optimistic update - update UI immediately
+    setLeds(prevLeds => prevLeds.map(l =>
+      l.id === id ? { ...l, active: newActiveState } : l
+    ));
+
+    try {
+      const { error } = await supabase
+        .from('led_configs')
+        .update({ is_active: newActiveState })
+        .eq('id', id);
+
+      if (error) {
+        // Revert on error
+        setLeds(prevLeds => prevLeds.map(l =>
+          l.id === id ? { ...l, active: originalActive } : l
+        ));
+        throw error;
+      }
+
+      toast.success("Status LED berhasil diubah");
+    } catch (error) {
+      console.error('Error toggling LED:', error);
+      // Ensure revert on unexpected errors
+      setLeds(prevLeds => prevLeds.map(l =>
+        l.id === id ? { ...l, active: originalActive } : l
+      ));
+      toast.error("Gagal mengubah status LED");
+    }
+  };
+
+  const deleteLED = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('led_configs')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setLeds(leds.filter(led => led.id !== id));
+      toast.success("LED berhasil dihapus");
+    } catch (error) {
+      console.error('Error deleting LED:', error);
+      toast.error("Gagal menghapus LED");
+    }
+  };
+
+  const addLED = async () => {
+    if (!user) {
+      toast.error("User tidak terautentikasi");
+      return;
+    }
+    if (!newLED.name) {
+      toast.error("Nama LED harus diisi");
+      return;
+    }
+    if (!newLED.device_id) {
+      toast.error("Pilih device terlebih dahulu");
+      return;
+    }
+
+    // Validation for duplicate Name or Pin
+    const isNameDuplicate = leds.some(led =>
+      led.name.toLowerCase() === newLED.name.toLowerCase() && led.device_id === newLED.device_id
+    );
+    const isPinDuplicate = leds.some(led =>
+      led.pin === newLED.pin && led.device_id === newLED.device_id
+    );
+
+    if (isNameDuplicate) {
+      toast.error(`Nama "${newLED.name}" sudah digunakan pada device ini`);
+      return;
+    }
+    if (isPinDuplicate) {
+      toast.error(`Pin GPIO ${newLED.pin} sudah digunakan pada device ini`);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('led_configs')
+        .insert({
+          device_id: newLED.device_id,
+          name: newLED.name,
+          pin: newLED.pin,
+          schedule: newLED.schedule,
+          active_time: newLED.startTime,
+          inactive_time: newLED.endTime,
+          is_active: false,
+          mode: newLED.mode
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await fetchLEDs();
+      setNewLED(defaultFormData);
+      setIsAddDialogOpen(false);
+      toast.success("LED berhasil ditambahkan");
+    } catch (error) {
+      console.error('Error adding LED:', error);
+      toast.error("Gagal menambahkan LED");
+    }
+  };
+
+  const openEditDialog = (led: LED) => {
+    setEditingLED(led);
+    setEditFormData({
+      name: led.name,
+      pin: led.pin,
+      device_id: led.device_id,
+      schedule: led.schedule as "daily" | "weekly" | "monthly",
+      startTime: led.active_time,
+      endTime: led.inactive_time,
+      mode: led.mode
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const updateLED = async () => {
+    if (!editingLED) return;
+
+    if (!editFormData.name) {
+      toast.error("Nama LED harus diisi");
+      return;
+    }
+    if (!editFormData.device_id) {
+      toast.error("Pilih device terlebih dahulu");
+      return;
+    }
+
+    // Validation for duplicate Name or Pin (excluding the current LED being edited)
+    const isNameDuplicate = leds.some(led =>
+      led.id !== editingLED.id &&
+      led.name.toLowerCase() === editFormData.name.toLowerCase() &&
+      led.device_id === editFormData.device_id
+    );
+    const isPinDuplicate = leds.some(led =>
+      led.id !== editingLED.id &&
+      led.pin === editFormData.pin &&
+      led.device_id === editFormData.device_id
+    );
+
+    if (isNameDuplicate) {
+      toast.error(`Nama "${editFormData.name}" sudah digunakan pada device ini`);
+      return;
+    }
+    if (isPinDuplicate) {
+      toast.error(`Pin GPIO ${editFormData.pin} sudah digunakan pada device ini`);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('led_configs')
+        .update({
+          device_id: editFormData.device_id,
+          name: editFormData.name,
+          pin: editFormData.pin,
+          schedule: editFormData.schedule,
+          active_time: editFormData.startTime,
+          inactive_time: editFormData.endTime,
+          mode: editFormData.mode
+        })
+        .eq('id', editingLED.id);
+
+      if (error) throw error;
+
+      await fetchLEDs();
+      setIsEditDialogOpen(false);
+      setEditingLED(null);
+      toast.success("LED berhasil diperbarui");
+    } catch (error) {
+      console.error('Error updating LED:', error);
+      toast.error("Gagal memperbarui LED");
+    }
+  };
+
+  const getDeviceName = (deviceId: string) => {
+    const device = devices.find(d => d.id === deviceId);
+    return device?.name || "Unknown Device";
+  };
+
+
+
+  return (
+    <div className="space-y-9">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight">Controller</h2>
+          <p className="text-muted-foreground text-sm">Kelola dan kontrol rumah Anda</p>
+        </div>
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogTrigger asChild>
+            <button className="relative flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-b from-white/80 via-gray-100/60 to-gray-300/80 dark:from-white/30 dark:via-white/20 dark:to-white/10 border border-white/50 dark:border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.12),inset_0_2px_4px_rgba(255,255,255,0.8),inset_0_-2px_4px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_2px_rgba(255,255,255,0.3)] backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-[0_12px_40px_rgba(0,0,0,0.15),inset_0_2px_4px_rgba(255,255,255,0.9)] active:scale-95 group overflow-hidden">
+              <span className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <Plus className="relative h-4 w-4 text-gray-700 dark:text-white" />
+              <span className="relative text-sm font-medium text-gray-700 dark:text-white">switch</span>
+            </button>
+          </DialogTrigger>
+          <DialogContent className="w-[92%] max-w-[400px] sm:max-w-[500px] bg-card/70 backdrop-blur-2xl border-white/20 rounded-3xl p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">Tambah switch Baru</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                Konfigurasi switch baru dengan pin dan jadwal yang diinginkan
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[70vh] overflow-y-auto px-1">
+              <LEDFormFields formData={newLED} setFormData={setNewLED} devices={devices} />
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                Batal
+              </Button>
+              <Button onClick={addLED} className="bg-primary hover:bg-primary/90">
+                Simpan switch
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="w-[92%] max-w-[400px] sm:max-w-[500px] bg-card/70 backdrop-blur-2xl border-white/20 rounded-3xl p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Edit switch</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Ubah konfigurasi switch: pin, jadwal, dan waktu operasi
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-y-auto px-1">
+            <LEDFormFields formData={editFormData} setFormData={setEditFormData} devices={devices} />
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Batal
+            </Button>
+            <Button onClick={updateLED} className="bg-primary hover:bg-primary/90">
+              Simpan Perubahan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {loading ? (
+        <div className="text-center py-12 text-muted-foreground">
+          Loading switch configurations...
+        </div>
+      ) : devices.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <p className="text-muted-foreground mb-4">
+              Belum ada device terdaftar. Tambahkan device terlebih dahulu di halaman Device Management.
+            </p>
+          </CardContent>
+        </Card>
+      ) : leds.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <p className="text-muted-foreground mb-4">
+              Belum ada switch terkonfigurasi. Klik tombol "add switch" untuk memulai.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="flex flex-wrap justify-start gap-3 sm:gap-6">
+          {leds.map((led) => (
+            <LEDCardItem
+              key={led.id}
+              led={led}
+              deviceName={getDeviceName(led.device_id)}
+              onToggle={toggleLED}
+              onEdit={openEditDialog}
+              onDelete={deleteLED}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default LEDControl;

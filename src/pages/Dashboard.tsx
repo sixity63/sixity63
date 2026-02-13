@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import WeeklyChart from '@/components/WeeklyChart';
 
 interface Device {
   id: string;
@@ -36,6 +37,57 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const updateTimersRef = useRef<Record<string, number>>({});
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  /* Profile Image Logic */
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (user?.id) {
+        // 1. Try local cache first for speed
+        const saved = localStorage.getItem(`user_profile_image_${user.id}`);
+        if (saved) setProfileImage(saved);
+
+        // 2. Sync from Supabase in background
+        try {
+          const { data, error } = await supabase
+            .from('profiles' as any)
+            .select('avatar_url')
+            .eq('id', user.id)
+            .maybeSingle(); // Pakai maybeSingle agar tidak error jika row tidak ada
+
+          if (error) {
+            console.error("Error fetching profile:", error);
+            return;
+          }
+
+          if (data && (data as any).avatar_url) {
+            // Ada data di cloud -> Update lokal
+            const remoteUrl = (data as any).avatar_url;
+            if (remoteUrl !== saved) {
+              console.log("Syncing profile from cloud...");
+              setProfileImage(remoteUrl);
+              localStorage.setItem(`user_profile_image_${user.id}`, remoteUrl);
+            }
+          } else {
+            // Data di cloud KOSONG/HILANG -> Hapus lokal juga
+            if (saved) {
+              console.log("Cloud profile removed, clearing local...");
+              setProfileImage(null);
+              localStorage.removeItem(`user_profile_image_${user.id}`);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to sync profile", err);
+        }
+      } else {
+        setProfileImage(null);
+      }
+    };
+
+    loadProfile();
+    window.addEventListener('profile-updated', loadProfile);
+    return () => window.removeEventListener('profile-updated', loadProfile);
+  }, [user]);
 
 
 
@@ -59,7 +111,7 @@ const Dashboard = () => {
       const lastSeen = new Date(device.last_seen);
       const now = new Date();
       const diffMinutes = (now.getTime() - lastSeen.getTime()) / (1000 * 60);
-      return diffMinutes < (10 / 60); // 10 seconds
+      return diffMinutes < 1; // 1 minute
     }).length;
   };
 
@@ -253,6 +305,8 @@ const Dashboard = () => {
     },
   ];
 
+
+
   return (
     <div className="min-h-screen bg-background dark:bg-transparent p-0 md:p-6 lg:p-8 safe-area-top">
       {/* Main Container - Neumorphic Card */}
@@ -261,8 +315,12 @@ const Dashboard = () => {
         {/* Header Section */}
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 rounded-full bg-background dark:bg-white/10 shadow-[4px_4px_8px_hsl(var(--neumorphic-shadow-dark)),-4px_-4px_8px_hsl(var(--neumorphic-shadow-light))] dark:shadow-none flex items-center justify-center">
-              <User className="w-6 h-6 text-muted-foreground" />
+            <div className="w-12 h-12 rounded-full bg-background dark:bg-white/10 shadow-[4px_4px_8px_hsl(var(--neumorphic-shadow-dark)),-4px_-4px_8px_hsl(var(--neumorphic-shadow-light))] dark:shadow-none flex items-center justify-center overflow-hidden border border-border/50">
+              {profileImage ? (
+                <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <User className="w-6 h-6 text-muted-foreground" />
+              )}
             </div>
             <div>
               <p className="text-sm text-muted-foreground">{getGreeting()}</p>
@@ -328,7 +386,7 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {devices.map((device) => {
                 const isOnline = device.last_seen &&
-                  (new Date().getTime() - new Date(device.last_seen).getTime()) / (1000 * 60) < (10 / 60); // 10 seconds
+                  (new Date().getTime() - new Date(device.last_seen).getTime()) / (1000 * 60) < 1; // 1 minute
                 const deviceSensor = sensorData[device.id];
 
                 return (
@@ -369,6 +427,10 @@ const Dashboard = () => {
           )}
         </div>
 
+        {/* Weekly Temperature Chart */}
+        {selectedDeviceId && (
+          <WeeklyChart deviceId={selectedDeviceId} />
+        )}
 
       </div>
     </div>

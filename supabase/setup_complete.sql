@@ -184,3 +184,18 @@ USING (true);
 -- VITE_SUPABASE_PUBLISHABLE_KEY=your_anon_key_here
 
 
+-- ============================================
+-- STEP 8: Setup Auto Cleanup (OPTIONAL)
+-- ============================================
+-- Jalankan ini HANYA jika Anda ingin menghapus data sensor lama secara otomatis
+-- (Misal: Hapus data yang lebih dari 7 hari untuk menghemat storage)
+
+-- 1. Enable pg_cron active
+-- create extension if not exists pg_cron;
+
+-- 2. Schedule daily cleanup at 09:00 AM (UTC+8)
+-- select cron.schedule(
+--   'cleanup-old-sensor-data',
+--   '0 1 * * *', -- 01:00 UTC = 09:00 AM Local Time
+--   $$ delete from sensor_data where created_at < now() - interval '7 days' $$
+-- );
