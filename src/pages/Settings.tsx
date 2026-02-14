@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Wifi, WifiOff, RefreshCw, Save, Lock, Sun, Moon } from "lucide-react";
+import { Wifi, WifiOff, Save, Lock, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,11 +27,7 @@ const Settings = () => {
   const [devices, setDevices] = useState<any[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [availableNetworks] = useState([
-    { ssid: "MyWiFi", signal: "Strong", secured: true },
-    { ssid: "GuestNetwork", signal: "Medium", secured: false },
-    { ssid: "Office_WiFi", signal: "Weak", secured: true },
-  ]);
+
 
   // Profile Picture State
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -245,7 +241,7 @@ const Settings = () => {
       )
       .subscribe();
 
-    // 2. Listen to sensor data to update online status realtime
+    // 2. Listen to sensor_data untuk status online
     const sensorChannel = supabase
       .channel('settings-sensor-updates')
       .on(
@@ -253,12 +249,10 @@ const Settings = () => {
         { event: 'INSERT', schema: 'public', table: 'sensor_data' },
         (payload: any) => {
           if (payload.new && selectedDevice && payload.new.device_id === selectedDevice.id) {
-            // Device is sending data -> It is Online
             setIsConnected(true);
-            // Update last_seen display locally
             setSelectedDevice((prev: any) => ({
               ...prev,
-              last_seen: new Date().toISOString()
+              last_seen: payload.new.created_at || new Date().toISOString()
             }));
           }
         }
@@ -330,31 +324,36 @@ const Settings = () => {
 
       if (error) throw error;
 
-      // Try to notify device via MQTT bridge
+      // Kirim ke perangkat via MQTT bridge (jika berjalan)
       try {
         const macRaw = selectedDevice.mac_address || '';
         const mac = macRaw.replace(/:/g, '').toLowerCase();
+        if (!mac) {
+          toast.success("Konfigurasi WiFi berhasil disimpan. Isi MAC address perangkat di halaman Devices agar bisa dikirim via bridge.");
+          return;
+        }
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (BRIDGE_API_KEY) headers['X-API-KEY'] = BRIDGE_API_KEY;
+
         const res = await fetch(`${BRIDGE_URL}/api/device/${mac}/config`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(BRIDGE_API_KEY ? { 'X-API-KEY': BRIDGE_API_KEY } : {}),
-          },
+          headers,
           body: JSON.stringify({
             wifi_ssid: wifiConfig.ssid,
             wifi_password: wifiConfig.password,
           }),
         });
 
-        if (!res.ok) {
-          console.warn('Bridge responded with non-OK', await res.text());
-          toast.success("Konfigurasi WiFi berhasil disimpan pada server. Perangkat akan menerima konfigurasi saat bridge berhasil mengirim.");
-        } else {
+        if (res.ok) {
           toast.success("Konfigurasi WiFi berhasil disimpan dan dikirim ke perangkat.");
+        } else if (res.status === 401) {
+          toast.success("Konfigurasi WiFi berhasil disimpan. Agar dikirim ke perangkat: set VITE_BRIDGE_API_KEY di .env (sama dengan BRIDGE_API_KEY di server) dan jalankan MQTT bridge.");
+        } else {
+          toast.success("Konfigurasi WiFi berhasil disimpan. Bridge mengembalikan error—pastikan MQTT broker dan bridge berjalan.");
         }
       } catch (bridgeErr) {
         console.error('Bridge error', bridgeErr);
-        toast.success("Konfigurasi WiFi berhasil disimpan pada server. Namun pengiriman ke perangkat gagal.");
+        toast.success("Konfigurasi WiFi berhasil disimpan. Untuk kirim ke perangkat: jalankan server bridge (folder server/) dan set VITE_MQTT_BRIDGE_URL di .env ke URL bridge.");
       }
     } catch (error) {
       console.error('Error saving wifi config:', error);
@@ -364,9 +363,7 @@ const Settings = () => {
     }
   };
 
-  const handleScan = () => {
-    toast.success("Memindai jaringan WiFi...");
-  };
+
 
   // Password change state and handler
   const [passwordData, setPasswordData] = useState({
@@ -493,87 +490,49 @@ const Settings = () => {
             </CardContent>
           </Card>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="border-border bg-card/50 dark:bg-transparent dark:border-white/10">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  {isConnected ? (
-                    <Wifi className="h-5 w-5 text-primary" />
-                  ) : (
-                    <WifiOff className="h-5 w-5 text-muted-foreground" />
-                  )}
-                  Status Koneksi
-                </CardTitle>
-                <CardDescription>
-                  {selectedDevice ? selectedDevice.name : 'Informasi koneksi saat ini'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Status:</span>
-                  <Badge variant={isConnected ? "default" : "secondary"} className={isConnected ? "bg-primary" : ""}>
-                    {isConnected ? "Terhubung" : "Terputus"}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Device:</span>
-                  <span className="text-sm font-medium">{selectedDevice?.name || "-"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">SSID:</span>
-                  <span className="text-sm font-medium">{selectedDevice?.wifi_ssid || "-"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">MAC Address:</span>
-                  <span className="text-sm font-medium">{selectedDevice?.mac_address || "-"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Terakhir Terlihat:</span>
-                  <span className="text-sm font-medium">
-                    {selectedDevice?.last_seen
-                      ? new Date(selectedDevice.last_seen).toLocaleString('id-ID')
-                      : "-"}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border bg-card/50 dark:bg-transparent dark:border-white/10">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl font bold">Jaringan Tersedia</CardTitle>
-                    <CardDescription>Daftar WiFi yang terdeteksi</CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={handleScan}>
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {availableNetworks.map((network, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors cursor-pointer"
-                      onClick={() => setWifiConfig({ ...wifiConfig, ssid: network.ssid })}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Wifi className={`h-4 w-4 ${network.signal === 'Strong' ? 'text-primary' : 'text-muted-foreground'}`} />
-                        <div>
-                          <p className="font-medium">{network.ssid}</p>
-                          <p className="text-xs text-muted-foreground">{network.signal}</p>
-                        </div>
-                      </div>
-                      {network.secured && (
-                        <Badge variant="outline" className="text-xs">Secured</Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <Card className="border-border bg-card/50 dark:bg-transparent dark:border-white/10">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {isConnected ? (
+                  <Wifi className="h-5 w-5 text-primary" />
+                ) : (
+                  <WifiOff className="h-5 w-5 text-muted-foreground" />
+                )}
+                Status Koneksi
+              </CardTitle>
+              <CardDescription>
+                {selectedDevice ? selectedDevice.name : 'Informasi koneksi saat ini'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Status:</span>
+                <Badge variant={isConnected ? "default" : "secondary"} className={isConnected ? "bg-primary" : ""}>
+                  {isConnected ? "Terhubung" : "Terputus"}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Device:</span>
+                <span className="text-sm font-medium">{selectedDevice?.name || "-"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">SSID:</span>
+                <span className="text-sm font-medium">{selectedDevice?.wifi_ssid || "-"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">MAC Address:</span>
+                <span className="text-sm font-medium">{selectedDevice?.mac_address || "-"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Terakhir Terlihat:</span>
+                <span className="text-sm font-medium">
+                  {selectedDevice?.last_seen
+                    ? new Date(selectedDevice.last_seen).toLocaleString('id-ID')
+                    : "-"}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
 
           <Card className="border-border bg-card/50 dark:bg-transparent dark:border-white/10">
             <CardHeader>

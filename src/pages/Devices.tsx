@@ -46,15 +46,11 @@ const Devices = () => {
           .eq('device_id', device.id)
           .order('created_at', { ascending: false })
           .limit(1)
-          .single();
-
+          .maybeSingle();
         if (sensorData?.created_at) {
-          const sensorTime = new Date(sensorData.created_at).getTime();
-          const deviceTime = device.last_seen ? new Date(device.last_seen).getTime() : 0;
-
-          if (sensorTime > deviceTime) {
-            return { ...device, last_seen: sensorData.created_at };
-          }
+          const st = new Date(sensorData.created_at).getTime();
+          const dt = device.last_seen ? new Date(device.last_seen).getTime() : 0;
+          if (st > dt) return { ...device, last_seen: sensorData.created_at };
         }
         return device;
       }));
@@ -133,7 +129,7 @@ const Devices = () => {
   const isOnline = (lastSeen: string | null) => {
     if (!lastSeen) return false;
     const diff = Date.now() - new Date(lastSeen).getTime();
-    return diff < 60000; // Online jika update dalam 1 menit
+    return diff < 10000; // Online jika update dalam 10 detik
   };
 
   if (loading) {

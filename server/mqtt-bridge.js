@@ -8,6 +8,15 @@ const bodyParser = require('body-parser');
 const mqtt = require('mqtt');
 
 const app = express();
+
+// CORS: izinkan request dari web dashboard (origin mana pun)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-KEY');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 app.use(bodyParser.json());
 
 const BRIDGE_API_KEY = process.env.BRIDGE_API_KEY || 'change_me_in_production';

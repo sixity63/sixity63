@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 
 interface DeviceContextType {
   selectedDeviceId: string;
@@ -8,14 +9,24 @@ interface DeviceContextType {
 const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
 
 export function DeviceProvider({ children }: { children: ReactNode }) {
-  const [selectedDeviceId, setSelectedDeviceIdState] = useState<string>(() => {
-    // Load from localStorage on init
-    return localStorage.getItem('selectedDeviceId') || '';
-  });
+  const { user } = useAuth();
+  const [selectedDeviceId, setSelectedDeviceIdState] = useState<string>('');
+
+  useEffect(() => {
+    if (user?.id) {
+      const saved = localStorage.getItem(`selectedDeviceId_${user.id}`);
+      if (saved) setSelectedDeviceIdState(saved);
+      else setSelectedDeviceIdState('');
+    } else {
+      setSelectedDeviceIdState('');
+    }
+  }, [user]);
 
   const setSelectedDeviceId = (deviceId: string) => {
     setSelectedDeviceIdState(deviceId);
-    localStorage.setItem('selectedDeviceId', deviceId);
+    if (user?.id) {
+      localStorage.setItem(`selectedDeviceId_${user.id}`, deviceId);
+    }
   };
 
   return (

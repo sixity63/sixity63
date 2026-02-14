@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import WeeklyChart from '@/components/WeeklyChart';
+import { useDevice } from '@/contexts/DeviceContext';
 
 interface Device {
   id: string;
@@ -36,24 +37,23 @@ const Dashboard = () => {
   const [sensorData, setSensorData] = useState<Record<string, SensorData>>({});
   const [loading, setLoading] = useState(true);
   const updateTimersRef = useRef<Record<string, number>>({});
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const deviceIdsRef = useRef<string[]>([]);
+  const { selectedDeviceId, setSelectedDeviceId } = useDevice();
   /* Profile Image Logic */
   const [profileImage, setProfileImage] = useState<string | null>(null);
 
   useEffect(() => {
     const loadProfile = async () => {
       if (user?.id) {
-        // 1. Try local cache first for speed
         const saved = localStorage.getItem(`user_profile_image_${user.id}`);
         if (saved) setProfileImage(saved);
 
-        // 2. Sync from Supabase in background
         try {
           const { data, error } = await supabase
             .from('profiles' as any)
             .select('avatar_url')
             .eq('id', user.id)
-            .maybeSingle(); // Pakai maybeSingle agar tidak error jika row tidak ada
+            .maybeSingle();
 
           if (error) {
             console.error("Error fetching profile:", error);
@@ -61,17 +61,13 @@ const Dashboard = () => {
           }
 
           if (data && (data as any).avatar_url) {
-            // Ada data di cloud -> Update lokal
             const remoteUrl = (data as any).avatar_url;
             if (remoteUrl !== saved) {
-              console.log("Syncing profile from cloud...");
               setProfileImage(remoteUrl);
               localStorage.setItem(`user_profile_image_${user.id}`, remoteUrl);
             }
           } else {
-            // Data di cloud KOSONG/HILANG -> Hapus lokal juga
             if (saved) {
-              console.log("Cloud profile removed, clearing local...");
               setProfileImage(null);
               localStorage.removeItem(`user_profile_image_${user.id}`);
             }
@@ -88,8 +84,6 @@ const Dashboard = () => {
     window.addEventListener('profile-updated', loadProfile);
     return () => window.removeEventListener('profile-updated', loadProfile);
   }, [user]);
-
-
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -110,8 +104,8 @@ const Dashboard = () => {
       if (!device.last_seen) return false;
       const lastSeen = new Date(device.last_seen);
       const now = new Date();
-      const diffMinutes = (now.getTime() - lastSeen.getTime()) / (1000 * 60);
-      return diffMinutes < 1; // 1 minute
+      const diffSeconds = (now.getTime() - lastSeen.getTime()) / 1000;
+      return diffSeconds < 10; // Online jika update dalam 10 detik
     }).length;
   };
 
@@ -128,7 +122,6 @@ const Dashboard = () => {
         .eq('user_id', user.id);
 
       if (devicesData) {
-        // Set selected device ke device pertama jika belum ada yang dipilih
         if (devicesData.length > 0 && !selectedDeviceId) {
           setSelectedDeviceId(devicesData[0].id);
         }
@@ -140,34 +133,28 @@ const Dashboard = () => {
             .eq('device_id', device.id)
             .order('created_at', { ascending: false })
             .limit(1)
-            .single();
-          return { deviceId: device.id, data };
+            .maybeSingle();
+          return { deviceId: device.id, data: data || null };
         });
 
         const results = await Promise.all(sensorPromises);
         const sensorMap: Record<string, SensorData> = {};
 
-        // Update devices last_seen based on sensor data if it's newer
         const updatedDevices = devicesData.map(device => {
           const deviceSensor = results.find(r => r.deviceId === device.id)?.data;
-
           if (deviceSensor?.created_at) {
-            const sensorTime = new Date(deviceSensor.created_at).getTime();
-            const deviceTime = device.last_seen ? new Date(device.last_seen).getTime() : 0;
-
-            if (sensorTime > deviceTime) {
-              return { ...device, last_seen: deviceSensor.created_at };
-            }
+            const st = new Date(deviceSensor.created_at).getTime();
+            const dt = device.last_seen ? new Date(device.last_seen).getTime() : 0;
+            if (st > dt) return { ...device, last_seen: deviceSensor.created_at };
           }
           return device;
         });
 
         setDevices(updatedDevices);
+        deviceIdsRef.current = devicesData.map((d) => d.id);
 
         results.forEach(({ deviceId, data }) => {
-          if (data) {
-            sensorMap[deviceId] = data;
-          }
+          if (data) sensorMap[deviceId] = data;
         });
         setSensorData(sensorMap);
       }
@@ -176,49 +163,63 @@ const Dashboard = () => {
     };
 
     fetchData();
-    const intervalId = setInterval(fetchData, 10000); // Poll every 10 seconds
 
-    // Realtime subscription for new sensor data (only INSERT) with per-device debounce
     sensorChannel = supabase
-      .channel('sensor-data-changes-dashboard')
+      .channel('sensor-data-changes')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'sensor_data' },
         (payload: any) => {
-          if (payload?.new) {
-            const newRow = payload.new;
-            const deviceId = newRow.device_id;
-
-            // debounce updates per device to emulate Monitoring timing
-            if (updateTimersRef.current[deviceId]) {
-              clearTimeout(updateTimersRef.current[deviceId]);
-            }
-
-            updateTimersRef.current[deviceId] = window.setTimeout(() => {
-              setSensorData((prev) => ({
-                ...prev,
-                [deviceId]: newRow,
-              }));
-
-              // update device last_seen if available
-              setDevices((prev) => prev.map((d) => d.id === deviceId ? { ...d, last_seen: newRow.created_at } : d));
-
-              delete updateTimersRef.current[deviceId];
-            }, 1000);
-          }
+          const row = payload?.new;
+          if (!row?.device_id) return;
+          setSensorData((prev) => ({
+            ...prev,
+            [row.device_id]: {
+              device_id: row.device_id,
+              temperature: row.temperature,
+              soil_humidity: row.soil_humidity,
+              air_humidity: row.air_humidity,
+              tds: row.tds,
+            },
+          }));
+          setDevices((prev) =>
+            prev.map(d => d.id === row.device_id ? { ...d, last_seen: row.created_at || new Date().toISOString() } : d)
+          );
         }
       )
       .subscribe();
 
-    // cleanup timers when unsubscribing
-    return () => {
-      clearInterval(intervalId); // Clear polling interval
-      Object.values(updateTimersRef.current).forEach((t: number) => clearTimeout(t));
-      if (sensorChannel) supabase.removeChannel(sensorChannel);
-      if (devicesChannel) supabase.removeChannel(devicesChannel);
-    };
+    const pollInterval = setInterval(async () => {
+      if (deviceIdsRef.current.length === 0) return;
 
-    // Realtime subscription for devices table (insert/update/delete)
+      // 1. Ambil status terbaru dari tabel devices (untuk Heartbeat/Status Online)
+      const { data: updatedDevices } = await supabase
+        .from('devices')
+        .select('id, last_seen')
+        .eq('user_id', user.id);
+
+      if (updatedDevices) {
+        setDevices((prev) =>
+          prev.map(d => {
+            const match = updatedDevices.find(ud => ud.id === d.id);
+            return match ? { ...d, last_seen: match.last_seen || d.last_seen } : d;
+          })
+        );
+      }
+
+      // 2. Tetap ambil data sensor terbaru untuk tampilan nilai
+      for (const deviceId of deviceIdsRef.current) {
+        const { data } = await supabase
+          .from('sensor_data')
+          .select('temperature, soil_humidity, air_humidity, tds, device_id, created_at')
+          .eq('device_id', deviceId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (data) setSensorData((prev) => ({ ...prev, [deviceId]: data }));
+      }
+    }, 5000);
+
     devicesChannel = supabase
       .channel('devices-changes-dashboard')
       .on(
@@ -229,34 +230,31 @@ const Dashboard = () => {
             const newDevice = payload.new;
             setDevices((prev) => {
               const exists = prev.some(d => d.id === newDevice.id);
-              if (exists) return prev.map(d => d.id === newDevice.id ? newDevice : d);
-              return [newDevice, ...prev];
+              const next = exists ? prev.map(d => d.id === newDevice.id ? { ...d, ...newDevice } : d) : [newDevice, ...prev];
+              deviceIdsRef.current = next.map(d => d.id);
+              return next;
             });
           } else if (payload?.old) {
             const oldDevice = payload.old;
-            setDevices((prev) => prev.filter(d => d.id !== oldDevice.id));
+            setDevices((prev) => {
+              const next = prev.filter(d => d.id !== oldDevice.id);
+              deviceIdsRef.current = next.map(d => d.id);
+              return next;
+            });
           }
         }
       )
       .subscribe();
 
     return () => {
+      clearInterval(pollInterval);
       if (sensorChannel) supabase.removeChannel(sensorChannel);
       if (devicesChannel) supabase.removeChannel(devicesChannel);
     };
   }, [user]);
 
   const getDisplayData = () => {
-    const deviceData = sensorData[selectedDeviceId];
-    if (deviceData) {
-      return {
-        temperature: deviceData.temperature ?? null,
-        soil_humidity: deviceData.soil_humidity ?? null,
-        air_humidity: deviceData.air_humidity ?? null,
-        tds: deviceData.tds ?? null,
-      };
-    }
-    return { temperature: null, soil_humidity: null, air_humidity: null, tds: null };
+    return sensorData[selectedDeviceId] || { temperature: null, soil_humidity: null, air_humidity: null, tds: null };
   };
 
   const displayData = getDisplayData();
@@ -386,7 +384,7 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {devices.map((device) => {
                 const isOnline = device.last_seen &&
-                  (new Date().getTime() - new Date(device.last_seen).getTime()) / (1000 * 60) < 1; // 1 minute
+                  (new Date().getTime() - new Date(device.last_seen).getTime()) / 1000 < 10; // 10 seconds
                 const deviceSensor = sensorData[device.id];
 
                 return (
@@ -402,10 +400,10 @@ const Dashboard = () => {
                     {/* Device Info */}
                     <div className="flex-1 min-w-0">
                       <h4 className="font-medium text-foreground truncate">{device.name}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {deviceSensor && deviceSensor.temperature !== null && deviceSensor.temperature !== undefined
-                          ? `${deviceSensor.temperature}°C`
-                          : 'No data'}
+                      <p className="text-[10px] text-muted-foreground opacity-70">
+                        {device.last_seen
+                          ? `Update: ${new Date(device.last_seen).toLocaleTimeString('id-ID')}`
+                          : 'Belum pernah konek'}
                       </p>
                     </div>
 

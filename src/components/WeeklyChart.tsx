@@ -9,7 +9,7 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
-import { startOfWeek, getDay } from 'date-fns';
+import { startOfWeek } from 'date-fns';
 
 interface WeeklyChartProps {
     deviceId: string;
@@ -27,49 +27,45 @@ const WeeklyChart = ({ deviceId }: WeeklyChartProps) => {
         const fetchData = async () => {
             setLoading(true);
             const now = new Date();
-            // Start from Monday of current week
-            const startOfCurrentWeek = startOfWeek(now, { weekStartsOn: 1 });
+            const monday = startOfWeek(now, { weekStartsOn: 1 });
+            monday.setHours(0, 0, 0, 0);
 
-            const { data: sensorData } = await supabase
-                .from('sensor_data')
-                .select('created_at, temperature')
-                .eq('device_id', deviceId)
-                .gte('created_at', startOfCurrentWeek.toISOString())
-                .order('created_at', { ascending: true });
-
-            processData(sensorData || []);
-            setLoading(false);
-        };
-
-        const processData = (rawData: any[]) => {
-            // Init Mon-Sun structure
             const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-            const weeklyStats = days.map(day => ({
-                day,
-                total: 0,
-                count: 0
-            }));
 
-            if (rawData) {
-                rawData.forEach(record => {
-                    if (record.temperature !== null) {
-                        const date = new Date(record.created_at);
-                        const rawDay = getDay(date);
-                        const monIndexedDay = (rawDay + 6) % 7; // Shift so Mon is 0
+            // Query each day separately to avoid Supabase 1000-row default limit
+            const dayPromises = days.map(async (dayName, index) => {
+                const dayStart = new Date(monday);
+                dayStart.setDate(monday.getDate() + index);
+                dayStart.setHours(0, 0, 0, 0);
 
-                        weeklyStats[monIndexedDay].total += record.temperature;
-                        weeklyStats[monIndexedDay].count += 1;
-                    }
-                });
-            }
+                const dayEnd = new Date(dayStart);
+                dayEnd.setHours(23, 59, 59, 999);
 
-            // Format data: use 0 instead of null to ensure line is drawn
-            const formattedData = weeklyStats.map(d => ({
-                day: d.day,
-                temp: d.count > 0 ? Number((d.total / d.count).toFixed(1)) : 0
-            }));
+                const startStr = dayStart.toISOString();
+                const endStr = dayEnd.toISOString();
 
-            setData(formattedData);
+                // Fetch up to 10000 records per day to cover high-frequency sensors
+                const { data: records } = await supabase
+                    .from('sensor_chart')
+                    .select('temperature')
+                    .eq('device_id', deviceId)
+                    .gte('created_at', startStr)
+                    .lte('created_at', endStr)
+                    .not('temperature', 'is', null)
+                    .limit(10000);
+
+                let avg = 0;
+                if (records && records.length > 0) {
+                    const sum = records.reduce((acc, r) => acc + Number(r.temperature), 0);
+                    avg = Number((sum / records.length).toFixed(1));
+                }
+
+                return { day: dayName, temp: avg };
+            });
+
+            const results = await Promise.all(dayPromises);
+            setData(results);
+            setLoading(false);
         };
 
         fetchData();
@@ -79,11 +75,8 @@ const WeeklyChart = ({ deviceId }: WeeklyChartProps) => {
             .channel(`weekly-chart-${deviceId}`)
             .on(
                 'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'sensor_data', filter: `device_id=eq.${deviceId}` },
-                () => {
-                    // Re-fetch data on new insert
-                    fetchData();
-                }
+                { event: 'INSERT', schema: 'public', table: 'sensor_chart', filter: `device_id=eq.${deviceId}` },
+                () => fetchData()
             )
             .subscribe();
 

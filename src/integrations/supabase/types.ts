@@ -135,6 +135,79 @@ export type Database = {
           },
         ]
       }
+      sensor_chart: {
+        Row: {
+          air_humidity: number | null
+          created_at: string
+          device_id: string
+          id: string
+          soil_humidity: number | null
+          tds: number | null
+          temperature: number | null
+        }
+        Insert: {
+          air_humidity?: number | null
+          created_at?: string
+          device_id: string
+          id?: string
+          soil_humidity?: number | null
+          tds?: number | null
+          temperature?: number | null
+        }
+        Update: {
+          air_humidity?: number | null
+          created_at?: string
+          device_id?: string
+          id?: string
+          soil_humidity?: number | null
+          tds?: number | null
+          temperature?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sensor_chart_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sensor_latest: {
+        Row: {
+          air_humidity: number | null
+          device_id: string
+          soil_humidity: number | null
+          tds: number | null
+          temperature: number | null
+          updated_at: string
+        }
+        Insert: {
+          air_humidity?: number | null
+          device_id: string
+          soil_humidity?: number | null
+          tds?: number | null
+          temperature?: number | null
+          updated_at?: string
+        }
+        Update: {
+          air_humidity?: number | null
+          device_id?: string
+          soil_humidity?: number | null
+          tds?: number | null
+          temperature?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sensor_latest_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: true
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

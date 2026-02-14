@@ -25,7 +25,7 @@ const Monitoring = () => {
   const queryClient = useQueryClient();
 
   const { data: sensorData = [] } = useQuery({
-    queryKey: ['sensorData', selectedDevice, timeRange],
+    queryKey: ['sensorChart', selectedDevice, timeRange],
     queryFn: async () => {
       if (!selectedDevice) return [];
 
@@ -33,7 +33,7 @@ const Monitoring = () => {
       hoursAgo.setHours(hoursAgo.getHours() - parseInt(timeRange));
 
       const { data, error } = await supabase
-        .from('sensor_data')
+        .from('sensor_chart')
         .select('*')
         .eq('device_id', selectedDevice)
         .gte('created_at', hoursAgo.toISOString())
@@ -42,7 +42,7 @@ const Monitoring = () => {
       if (error) {
         toast({
           title: "Error",
-          description: "Gagal mengambil data sensor",
+          description: "Gagal mengambil data grafik",
           variant: "destructive",
         });
         throw error;
@@ -51,11 +51,23 @@ const Monitoring = () => {
       return data || [];
     },
     enabled: !!selectedDevice,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
   });
 
-  const currentData = sensorData.length > 0 ? {
+  const [realtimeData, setRealtimeData] = useState<{
+    temperature?: number;
+    soil_humidity?: number;
+    air_humidity?: number;
+    tds?: number;
+  } | null>(null);
+
+  const currentData = realtimeData ? {
+    temperature: realtimeData.temperature ?? 0,
+    soilHumidity: realtimeData.soil_humidity ?? 0,
+    airHumidity: realtimeData.air_humidity ?? 0,
+    tds: realtimeData.tds ?? 0,
+  } : sensorData.length > 0 ? {
     temperature: sensorData[sensorData.length - 1]?.temperature || 0,
     soilHumidity: sensorData[sensorData.length - 1]?.soil_humidity || 0,
     airHumidity: sensorData[sensorData.length - 1]?.air_humidity || 0,
@@ -87,64 +99,52 @@ const Monitoring = () => {
     };
   }, []);
 
+  // Realtime dari sensor_data untuk kartu nilai saat ini
   useEffect(() => {
-    if (selectedDevice) {
-      // Setup polling (fallback for realtime) - Updates Cache
-      const fetchLatest = async () => {
-        const { data } = await supabase
-          .from('sensor_data')
-          .select('*')
-          .eq('device_id', selectedDevice)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-
-        if (data) {
-          queryClient.setQueryData(['sensorData', selectedDevice, timeRange], (prevData: any[] = []) => {
-            const lastData = prevData[prevData.length - 1];
-            // Only add if it's newer than what we have
-            if (!lastData || new Date(data.created_at).getTime() > new Date(lastData.created_at).getTime()) {
-              return [...prevData, data];
-            }
-            return prevData;
-          });
-        }
-      };
-
-      const intervalId = setInterval(fetchLatest, 5000);
-
-      // Setup realtime subscription - Updates Cache
-      const channelName = `sensor-data-changes-${selectedDevice}`;
-      const channel = supabase
-        .channel(channelName)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'sensor_data',
-            filter: `device_id=eq.${selectedDevice}`
-          },
-          (payload) => {
-            console.log('New sensor data received:', payload);
-            // Add new data to the react-query cache
-            queryClient.setQueryData(['sensorData', selectedDevice, timeRange], (prevData: any[] = []) => {
-              return [...prevData, payload.new];
-            });
-          }
-        )
-        .subscribe();
-
-      // Refetch full data on focus (optional, but handled by useQuery refetchOnWindowFocus if enabled, here we manually sync via polling or let stales handle it)
-      // Since we set refetchOnWindowFocus: false, we rely on realtime/polling.
-      // But if user was away for LOOOONG time, polling handles it (if interval runs in background? no).
-      // Let's rely on standard query invalidation if needed, or just the polling when visible.
-
-      return () => {
-        clearInterval(intervalId);
-        supabase.removeChannel(channel);
-      };
+    if (!selectedDevice) {
+      setRealtimeData(null);
+      return;
     }
+    const fetchLatest = async () => {
+      const { data } = await supabase
+        .from('sensor_data')
+        .select('temperature, soil_humidity, air_humidity, tds')
+        .eq('device_id', selectedDevice)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) setRealtimeData(data);
+    };
+    fetchLatest();
+    const intervalId = setInterval(fetchLatest, 5000);
+    const ch = supabase
+      .channel(`sensor-data-realtime-${selectedDevice}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sensor_data', filter: `device_id=eq.${selectedDevice}` },
+        (payload: any) => { if (payload?.new) setRealtimeData(payload.new); }
+      )
+      .subscribe();
+    return () => {
+      clearInterval(intervalId);
+      supabase.removeChannel(ch);
+    };
+  }, [selectedDevice]);
+
+  // Update cache grafik saat sensor_chart dapat data baru (setiap 10 menit)
+  useEffect(() => {
+    if (!selectedDevice) return;
+    const channel = supabase
+      .channel(`sensor-chart-${selectedDevice}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sensor_chart', filter: `device_id=eq.${selectedDevice}` },
+        (payload: any) => {
+          if (payload?.new) queryClient.setQueryData(['sensorChart', selectedDevice, timeRange], (prev: any[] = []) => [...prev, payload.new]);
+        }
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
   }, [selectedDevice, timeRange, queryClient]);
 
   const fetchDevices = async () => {

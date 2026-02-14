@@ -17,6 +17,11 @@ Quick start (dev):
 3. Start the bridge:
    npm start
 
+4. Supaya pengiriman WiFi dari halaman Settings berhasil, di folder root project (web) set di .env:
+   - VITE_MQTT_BRIDGE_URL=http://localhost:3001   (atau URL tempat bridge berjalan)
+   - VITE_BRIDGE_API_KEY=mysecret                  (nilai sama dengan BRIDGE_API_KEY di server)
+   - CORS sudah diaktifkan di bridge sehingga request dari browser diizinkan.
+
 Endpoint:
  - POST /api/device/:mac/config
  - Headers: `X-API-KEY: <BRIDGE_API_KEY>` or query `?api_key=`.
